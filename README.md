@@ -45,7 +45,6 @@
        按下a＋v并且框选内容在演示区域 粘贴note和粘贴框选的事件  
        按下a＋b并且框选内容在演示区域 粘贴note和反向粘贴框选的事件  
   ##**相关**  
-  [wave](https://github.com/Ulydev/wave)  
   [LxgwNeoXiHei](https://github.com/lxgw/LxgwNeoXiHei)  
   [love2d](https://github.com/love2d/love)  
   
