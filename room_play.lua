@@ -1,5 +1,4 @@
 
-local contact_roller = 1 -- 鼠标滚动系数
 local ui_note = love.graphics.newImage("asset_ui_note.png")
 local ui_wipe = love.graphics.newImage("asset_ui_wipe.png")
 local ui_hold = love.graphics.newImage("asset_ui_hold_head.png")
@@ -75,10 +74,12 @@ draw = function()
         love.graphics.setColor(1,1,1,1) --侧线
         love.graphics.polygon("line",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
         love.graphics.setColor(1,1,1,1) --轨道编号
-        if track.track == chart.event[i].track and demo_mode == false then
-            love.graphics.setColor(0,1,1,1) --轨道编号
+        if demo_mode == false then
+            if track.track == chart.event[i].track then
+                love.graphics.setColor(0,1,1,1) --轨道编号
+            end
+            love.graphics.print(chart.event[i].track,x+w/2,settings.judge_line_y+20) --为了居中
         end
-        love.graphics.print(chart.event[i].track,x+w/2,settings.judge_line_y+20) --为了居中
     end
 
     local note_h = settings.note_height --25 * denom.scale
@@ -423,7 +424,9 @@ draw = function()
     objact_copy.draw()
 end,
 keypressed = function(key)
-    
+    if mouse.x > 1200 then  --限制范围
+        return
+    end
     objact_denom.keyboard(key)
     objact_music_speed.keyboard(key)
     objact_track.keyboard(key)
@@ -444,14 +447,14 @@ wheelmoved = function(x,y)
         return
     end
     --beat更改
-        local temp = contact_roller --临时数值
+        local temp = settings.contact_roller--临时数值
 
         music_play = false
 
         if y > 0 then
-            temp = contact_roller / denom.denom
+            temp = settings.contact_roller/ denom.denom
         else
-            temp = -contact_roller / denom.denom
+            temp = -settings.contact_roller/ denom.denom
         end
 
         beat.nowbeat = beat.nowbeat +temp
@@ -501,6 +504,6 @@ keyreleased = function(key)
 
 end,
 quit = function()
-    objact_save.quit()
+    return objact_save.quit()
 end
 }

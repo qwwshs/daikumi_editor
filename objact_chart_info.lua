@@ -53,14 +53,14 @@ objact_chart_info = {
         --输入框
         input_box_draw_all()
         love.graphics.setColor(1,1,1,1)
-        love.graphics.print("chart",x,y+20 + chart_info_pos_y) 
-        love.graphics.print("music",x,y+60 + chart_info_pos_y) 
-        love.graphics.print("chartor",x+w+10,y+20 + chart_info_pos_y) 
-        love.graphics.print("artist",x+w+10,y+60 + chart_info_pos_y) 
+        love.graphics.print(objact_language.get_string_in_languages("chart"),x,y+20 + chart_info_pos_y) 
+        love.graphics.print(objact_language.get_string_in_languages("music"),x,y+60 + chart_info_pos_y) 
+        love.graphics.print(objact_language.get_string_in_languages("chartor"),x+w+10,y+20 + chart_info_pos_y) 
+        love.graphics.print(objact_language.get_string_in_languages("artist"),x+w+10,y+60 + chart_info_pos_y) 
 
-        love.graphics.print("offset",x,y+100 + chart_info_pos_y)
-        love.graphics.print("bpm",x,y+160 + chart_info_pos_y)
-        love.graphics.print("beat",x+w+20,y+160 + chart_info_pos_y)
+        love.graphics.print(objact_language.get_string_in_languages("offset"),x,y+100 + chart_info_pos_y)
+        love.graphics.print(objact_language.get_string_in_languages("bpm"),x,y+160 + chart_info_pos_y)
+        love.graphics.print(objact_language.get_string_in_languages("beat"),x+w+20,y+160 + chart_info_pos_y)
 
         objact_bpm_list.draw()
 

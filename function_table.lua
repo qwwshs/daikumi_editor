@@ -65,3 +65,14 @@ function table_contains(array, element)  --元素查询
     end  
     return false  
 end  
+
+function fillMissingElements(tbl, metatable) --补充元素
+    for key, value in pairs(metatable) do
+        if type(value) == "table" then
+            tbl[key] = tbl[key] or {}
+            fillMissingElements(tbl[key], value)
+        else
+            tbl[key] = tbl[key] or value
+        end
+    end
+end

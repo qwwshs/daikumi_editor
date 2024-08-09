@@ -19,7 +19,7 @@ local meta_default_bezier = {
     }
 }
 
-objact_event_edit_default_bezier = { 
+objact_event_edit_default_bezier = { --bezier表格的
     load = function(x1,y1,r1,w1,h1)
         x= x1 --初始化
         y = y1
@@ -50,7 +50,7 @@ objact_event_edit_default_bezier = {
 
         love.graphics.draw(ui_up,x,y,r,_scale_w,_scale_h)
         love.graphics.draw(ui_down,x,y+h,r,_scale_w,_scale_h)
-        love.graphics.print("bezier",x-50,y)
+        love.graphics.print(objact_language.get_string_in_languages("bezier"),x-50,y)
 
         love.graphics.setColor(0.1,0.1,0.1,0.5)
         love.graphics.rectangle("fill",x-50,y + h,50,h) --输入框

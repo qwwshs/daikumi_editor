@@ -39,12 +39,12 @@ objact_event_edit = {  --编辑界面
         end
         input_box_draw_all()
         love.graphics.setColor(1,1,1,1)
-        love.graphics.print("track",x+200,y)
-        love.graphics.print("form",x+40,y+50)
-        love.graphics.print("to",x+40,y+100)
-        love.graphics.print("beat_start",x+40,y+150)
-        love.graphics.print("beat_end",x+40,y+200)
-        love.graphics.print("trans",x+40,y+250)
+        love.graphics.print(objact_language.get_string_in_languages("track"),x+200,y)
+        love.graphics.print(objact_language.get_string_in_languages("form"),x+40,y+50)
+        love.graphics.print(objact_language.get_string_in_languages("to"),x+40,y+100)
+        love.graphics.print(objact_language.get_string_in_languages("beat_start"),x+40,y+150)
+        love.graphics.print(objact_language.get_string_in_languages("beat_end"),x+40,y+200)
+        love.graphics.print(objact_language.get_string_in_languages("trans"),x+40,y+250)
 
         objact_event_edit_bezier.draw()
         objact_event_edit_default_bezier.draw()

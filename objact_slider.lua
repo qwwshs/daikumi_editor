@@ -24,7 +24,8 @@ objact_slider = {
         if isbutton == true then
             love.graphics.setColor(1,1,1,1)
             love.graphics.circle('fill',x + w /2,now_y,w / 2,4) --现在所在位置点 
-            love.graphics.print("nowtime:"..(math.floor(time.nowtime*100)/100).."\nbeat:"..math.floor(beat.nowbeat*100)/100,x+w,now_y)
+            love.graphics.print(objact_language.get_string_in_languages("nowtime")..":"..(math.floor(time.nowtime*100)/100).."\n"..
+            objact_language.get_string_in_languages(beat)..":"..math.floor(beat.nowbeat*100)/100,x+w,now_y)
         end
         local local_tab = {1} --用来计算密度的
         for i = 1 ,100 do

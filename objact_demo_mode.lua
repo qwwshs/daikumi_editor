@@ -12,9 +12,10 @@ objact_demo_mode ={ --演示谱面用的
                 time.nowtime = 0
                 music_play = true
                 music_speed = 1
-                objact_music_speed.update()
             end
             demo_mode = not demo_mode
+            objact_music_speed.update()
+            objact_mouse.update()
         end
     end
 }

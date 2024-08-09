@@ -114,7 +114,7 @@ objact_copy = {
 
     end,
     mousepressed = function(x,y)
-        mouse_start_pos = {x = x, y = y}
+        mouse_start_pos = {x = mouse.x, y = mouse.y}
     end,
     mousereleased = function(x,y)
         --松手＋shift确认选中
@@ -202,7 +202,7 @@ objact_copy = {
         mouse_start_pos.y = mouse_start_pos.y + y
     end,
     keyboard = function(key)
-        if iskeyboard.lshift == true or iskeyboard.rshift == true then
+        if iskeyboard.lshift == true or iskeyboard.rshift == true and mouse.down_state == true then
             objact_copy.mousereleased(mouse.x,mouse.y)
         end
         
@@ -247,8 +247,6 @@ objact_copy = {
                 end
                 copy_tab2.note[i].beat = beat_add(beat_sub(copy_tab2.note[i].beat,copy_tab.note[1].beat),y_to_beat(mouse.y))
                 if copy_tab2.note[i].type == "hold" then
-                    log(thebeat(copy_tab2.note[i].beat2,copy_tab2.note[1].beat))
-                    log(thebeat(beat_add(beat_sub(copy_tab2.note[i].beat2,copy_tab.note[1].beat),y_to_beat(mouse.y))))
                     copy_tab2.note[i].beat2 = beat_add(beat_sub(copy_tab2.note[i].beat2,copy_tab.note[1].beat),y_to_beat(mouse.y))
                 end
             end

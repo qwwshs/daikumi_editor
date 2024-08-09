@@ -7,7 +7,7 @@ room_sidebar = {
     load = function()
         objact_button_chart_info.load(1250,100,0,150,50)
         objact_button_settings.load(1250,200,0,150,50)
-
+        objact_button_togithub.load(1250,300,0,150,50)
         objact_button_break.load(1200,40,0,30,30)
         
     end,
@@ -23,14 +23,14 @@ room_sidebar = {
         objact_chart_info.draw()
         objact_settings.draw()
         objact_event_edit.draw()
-
+        objact_button_togithub.draw()
         if  not room_type("nil") then  --退出
             objact_button_break.draw()
         end
-
-        love.graphics.print(displayed_content,1250,50)
         love.graphics.setColor(1,1,1,1)
-        love.graphics.print("version"..version,0,780)
+        love.graphics.print(objact_language.get_string_in_languages(displayed_content),1250,50)
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.print(objact_language.get_string_in_languages("version")..version,1200,780)
     end,
     keypressed = function(key)
         objact_chart_info.keypressed(key)
@@ -54,7 +54,7 @@ room_sidebar = {
         objact_chart_info.mousepressed( x, y, button, istouch, presses )
         objact_settings.mousepressed( x, y, button, istouch, presses )
         objact_event_edit.mousepressed( x, y, button, istouch, presses )
-
+        objact_button_togithub.mousepressed(x, y, button, istouch, presses)
         if not room_type("nil") then  --退出
             objact_button_break.mousepressed(x, y, button, istouch, presses)
         end

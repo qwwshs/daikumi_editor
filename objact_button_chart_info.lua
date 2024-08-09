@@ -20,7 +20,7 @@ objact_button_chart_info = {
         end
         love.graphics.setColor(1,1,1,1)
         love.graphics.rectangle("line",x,y,w,h)
-        love.graphics.print("info",x + 10,y)
+        love.graphics.print(objact_language.get_string_in_languages("info"),x + 10,y)
     end,
     mousepressed = function( x1, y1, button, istouch, presses )
         if not room_type(type) then

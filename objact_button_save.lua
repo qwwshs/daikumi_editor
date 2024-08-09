@@ -5,7 +5,7 @@ local w = 0
 local h = 0
 local r = 0
 local ui_save = love.graphics.newImage("asset_ui_save.png")
-
+local quit_click = 0 --点击次数
 objact_save = { --分度改变用的
     load = function(x1,y1,r1,w1,h1)
         x= x1 --初始化
@@ -35,6 +35,11 @@ objact_save = { --分度改变用的
         end
     end,
     quit = function()
+    if quit_click > 0 then --防止无法退出
+        return
+    end
+    quit_click = quit_click + 1
+
     -- 读取文本文件 内容相同直接退出
     local chart_file = io.open("chart.txt", "r")  -- 以只读模式打开文件
     local ischart
@@ -49,11 +54,9 @@ objact_save = { --分度改变用的
     if tablesEqual(ischart,chart) then
         return
     end
-    
-        local isbutton = love.window.showMessageBox( "quit", "save?",{"Y","N"},"info",false)
-        if isbutton == 1 then
-            save(chart,"chart.txt")
-            objact_message_box.message("save")
-        end
+        local yes_func = function() save(chart,"chart.txt") love.event.quit(0) end
+        local no_func = function()  love.event.quit(0) end
+        objact_message_box.message_window_dlsplay(objact_language.get_string_in_languages("save"),yes_func,no_func)
+        return true
     end,
 }

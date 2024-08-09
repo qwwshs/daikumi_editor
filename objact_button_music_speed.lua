@@ -26,7 +26,7 @@ objact_music_speed = { --分度改变用的
 
         love.graphics.draw(ui_up,x,y,r,_scale_w,_scale_h)
         love.graphics.draw(ui_down,x,y+h,r,_scale_w,_scale_h)
-        love.graphics.print("music_speed",x-80,y)
+        love.graphics.print(objact_language.get_string_in_languages("music_speed"),x-80,y)
 
         love.graphics.setColor(0.1,0.1,0.1,0.5)
         love.graphics.rectangle("fill",x-50,y + h,50,h) --输入框

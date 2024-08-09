@@ -9,6 +9,7 @@ local input_type = false --输入状态
 local type = "settings"
 local ui_break = love.graphics.newImage("asset_ui_break.png")
 local chart_info_pos_y = 0 --位移
+local setting_type ={}
 objact_settings = {
     load = function(x1,y1,r1,w1,h1)
         x= x1 --初始化
@@ -17,24 +18,35 @@ objact_settings = {
         h = h1
         r = r1
         chart_info_pos_y = 0
-
+        setting_type = {judge_line_y = "input_box",
+            angle =  "input_box",
+            music_volume =  "input_box",
+            hit_volume =  "input_box",
+            hit = "switch1",
+            hit_sound = "switch1",
+            language= "switch"..(objact_language.get_languages_number() - 1),
+            vsync= "switch2",
+            contact_roller=  "input_box",
+            mouse=  "switch1",
+            note_alpha =  "input_box",
+            note_height =  "input_box",
+        }
         if not room_type(type) then
             return
         else
             input_box_delete_all()
             switch_delete_all()
-            input_box_new("judge_line_y","settings.judge_line_y",x+ w + 10,y+40 + chart_info_pos_y,w,20,"number")
-            input_box_new("angle","settings.angle",x+ w + 10,y+80 + chart_info_pos_y,w,20,"number")
-            input_box_new("music_vol","settings.music_volume",x+ w + 10,y+120 + chart_info_pos_y,w,20,"number")
-            input_box_new("hit_vol","settings.hit_volume",x+ w + 10,y+160 + chart_info_pos_y,w,20,"number")
-            switch_new("hit","settings.hit",x+ w + 10,y+200 + chart_info_pos_y,20,20,1)
-            switch_new("hit_sound","settings.hit_sound",x+ w + 10,y+240 + chart_info_pos_y,20,20,1)
-            input_box_new("note_alpha","settings.note_alpha",x+ w,y + 280 + chart_info_pos_y,w,20,"number")
-            input_box_new("note_height","settings.note_height",x+ w,y + 320 + chart_info_pos_y,w,20,"number")
+            local i = 1
+            for k, v in pairs(setting_type) do
+                if setting_type[k] == "input_box" then
+                    input_box_new(k,"settings."..k,x+ w + 10,y+i * 40 + chart_info_pos_y,w,20,"number")
+                elseif setting_type[k] and string.sub(setting_type[k],1,6) == "switch" then
+                    switch_new(k,"settings."..k,x+ w + 10,y+i * 40 + chart_info_pos_y,w,20,tonumber(string.sub(setting_type[k],7,#setting_type[k])))
+                end
+                i = i + 1
+            end
 
         end
-
-        
     end,
     draw = function()
         if not room_type(type) then
@@ -46,14 +58,13 @@ objact_settings = {
         input_box_draw_all()
         switch_draw_all()
         love.graphics.setColor(1,1,1,1)
-        love.graphics.print("judge_y",x,y+40 + chart_info_pos_y) 
-        love.graphics.print("angle",x,y+80 + chart_info_pos_y) 
-        love.graphics.print("music_vol",x,y+120 + chart_info_pos_y) 
-        love.graphics.print("hit_vol",x,y+160 + chart_info_pos_y) 
-        love.graphics.print("hit",x,y+200 + chart_info_pos_y) 
-        love.graphics.print("hit_sound",x,y+240 + chart_info_pos_y) 
-        love.graphics.print("note_alpha",x,y +280 + chart_info_pos_y) 
-        love.graphics.print("note_height",x,y +320 + chart_info_pos_y) 
+        local i = 1
+        for k, v in pairs(setting_type) do
+            if setting_type[k]then
+                love.graphics.print(objact_language.get_string_in_languages(k),x,y+i * 40 + chart_info_pos_y) 
+            end
+            i = i + 1
+        end
 
 
     end,
