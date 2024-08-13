@@ -41,4 +41,5 @@
 {'note place','note放置'},
 {'wipe place','wipe放置'},
 {'hold place','hold放置'},
+{'audio_picture','音频图'},
 }

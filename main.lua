@@ -1,47 +1,48 @@
 utf8 = require("utf8")
 
-require("function_beat_and_time")
-require("function_log")
-require("function_string")
-require("function_table")
-require("function_save")
-require("function_RGB")
-require("function_input_box")
-require("function_bezier")
-require("function_math")
-require("function_switch")
-require("function_note")
-require("function_event")
-require("room_play")
-require("room_sidebar")
-require("objact_button_denom")
-require("objact_button_music_speed")
-require('objact_button_track_scale')
-require('objact_button_save')
-require("objact_mouse")
-require("objact_music_play")
-require('objact_message_box')
-require("objact_note")
-require("objact_note_edit_inplay")
-require("objact_event")
-require("objact_hit")
-require('objact_event_edit')
-require('objact_event_edit_bezier')
-require('objact_button_track')
-require('objact_button_chart_info')
-require('objact_button_event_edit_default_bezier')
-require('objact_button_break')
-require('objact_button_settings')
-require('objact_button_to_github')
-require('objact_chart_info')
-require('objact_bpm_list')
-require('objact_slider')
-require('objact_copy')
-require('objact_settings')
-require('objact_demo_mode')
-require('objact_language')
+require("function/beat_and_time")
+require("function/log")
+require("function/string")
+require("function/table")
+require("function/save")
+require("function/RGB")
+require("function/input_box")
+require("function/bezier")
+require("function/math")
+require("function/switch")
+require("function/note")
+require("function/event")
+require("room/play")
+require("room/sidebar")
+require("objact/button_denom")
+require("objact/button_music_speed")
+require('objact/button_track_scale')
+require('objact/button_save')
+require("objact/mouse")
+require("objact/music_play")
+require('objact/message_box')
+require("objact/note")
+require("objact/note_edit_inplay")
+require("objact/event")
+require("objact/hit")
+require('objact/event_edit')
+require('objact/event_edit_bezier')
+require('objact/button_track')
+require('objact/button_chart_info')
+require('objact/button_event_edit_default_bezier')
+require('objact/button_break')
+require('objact/button_settings')
+require('objact/button_to_github')
+require('objact/chart_info')
+require('objact/bpm_list')
+require('objact/slider')
+require('objact/copy')
+require('objact/redo')
+require('objact/settings')
+require('objact/demo_mode')
+require('objact/language')
 
-version = "0.0.2"
+version = "0.0.3"
 beat = {nowbeat = 0,allbeat = 100}
 time = {nowtime = 0 ,alltime = 100}
 denom = {scale = 1,denom = 4} --分度的缩放和使用的分度
@@ -50,6 +51,8 @@ track = {track = 1} -- 第一个轨道
 language = {} --语言表
 bg = nil
 music = nil
+music_data = {count = 0,soundData = nil} --音频可视化用的
+
 music_play = false
 mouse  = {x = 0,y = 0,original_x = 0,original_y = 0, down_state = false}--鼠标按下状态
 elapsed_time = 0 -- 已运行时间
@@ -84,6 +87,7 @@ local meta_settings = { --设置基本格式 元表
         judge_line_y = 700,
         angle = 90,
         music_volume = 100,
+        audio_picture = 0,
         mouse = 0,
         hit_volume = 100,
         hit = 0,
@@ -111,7 +115,6 @@ function love.load()
     end
     setmetatable(chart,meta_chart) --防谱报废
     fillMissingElements(chart,meta_chart.__index)
-
         -- 读取语言
         local language_file = io.open("language.txt", "r")  -- 以只读模式打开文件
         if language_file then
@@ -146,15 +149,15 @@ function love.load()
         local music_file2 = io.open("music.ogg", "r")  -- 以只读模式打开文件
         local music_file3 = io.open("music.mp3", "r")  -- 以只读模式打开文件
         if music_file then
-            music_esist,music_error = pcall(function() music = love.audio.newSource("music.wav", "stream") end)
+            music_esist,music_error = pcall(function() music = love.audio.newSource("music.wav", "stream") music_data.soundData = love.sound.newSoundData("music.wav")  end)
         elseif music_file2 then
-            music_esist,music_error = pcall(function() music = love.audio.newSource("music.ogg", "stream") end)
+            music_esist,music_error = pcall(function() music = love.audio.newSource("music.ogg", "stream") music_data.soundData = love.sound.newSoundData("music.wav") end)
         elseif music_file3 then
-            music_esist,music_error = pcall(function() music = love.audio.newSource("music.mp3", "stream") end)
+            music_esist,music_error = pcall(function() music = love.audio.newSource("music.mp3", "stream") music_data.soundData = love.sound.newSoundData("music.wav") end)
         end
         if music_esist then
-            
-            time.alltime = music:getDuration() + chart.offset/1000 -- 得到音频总时长
+            music_data.count = music_data.soundData:getSampleCount() --用来显示音频图
+            time.alltime = music:getDuration() + chart.offset / 1000 -- 得到音频总时长
             beat.allbeat = time_to_beat(chart.bpm_list,time.alltime)
         end
 
