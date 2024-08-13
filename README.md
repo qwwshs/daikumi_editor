@@ -48,5 +48,6 @@
        按下y    重做上一步对note的操作 
   ##**相关**  
   [LxgwNeoXiHei](https://github.com/lxgw/LxgwNeoXiHei)  
-  [love2d](https://github.com/love2d/love)  
+  [love2d](https://github.com/love2d/love) 
+  [dkjson](https://github.com/LuaDist/dkjson)
   
