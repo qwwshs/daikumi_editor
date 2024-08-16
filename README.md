@@ -1,10 +1,7 @@
 # **daikumi_editor**  
 这是一个takumi的饭制制谱器 使用love2d引擎制作 程序 ui均由qwws制作  
 ##**文件创建与应用程序打开**  
-    方法1：请将音频文件放在与main.lua同一级的文件夹 并将前缀改为music 背景文件 同理 前缀改成bg  
-    然后使用命令行到该文件夹下用love .的命令打开  
-    方法2：：请将音频文件 背景文件 放在与love.exe同一级的文件夹 并且再在与main.lua同一级的文件夹放一次  
-    然后将hit_sound 与default_bezier复制一份放在与love.exe同一级的文件夹 然后将dakumi editor的文件夹拖到love.exe打开  
+    将dakumi_editor打开然后导入带有谱面的zip或是一个音频文件
     love2d相关信息请阅览[love](https://love2d.org/)  
 ##**注意事项**  
     - 在使用前请切换英文输入法  
