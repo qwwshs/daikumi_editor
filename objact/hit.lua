@@ -11,15 +11,12 @@ end
 objact_hit = {
     load = function()
         -- 读取音频文件
-        local hit_file = io.open("hit_sound.wav", "r")  -- 以只读模式打开文件
-        local hit_file2 = io.open("hit_sound.ogg", "r")  -- 以只读模式打开文件
-        local hit_file3 = io.open("hit_sound.mp3", "r")  -- 以只读模式打开文件
-        if hit_file then
-            hit_sound = love.audio.newSource("hit_sound.wav", "stream")
-        elseif hit_file2 then
-            hit_sound = love.audio.newSource("hit_sound.ogg", "stream")
-        elseif hit_file3 then
-            hit_sound = love.audio.newSource("hit_sound.mp3", "stream")
+        local tab = love.filesystem.getDirectoryItems("" ) --得到文件夹下的所有文件
+        for i,v in ipairs(tab) do
+            if string.find(v,"hit_sound") then
+                hit_sound = love.audio.newSource(v, "stream")
+                break
+            end
         end
     end,
     update = function(dt)

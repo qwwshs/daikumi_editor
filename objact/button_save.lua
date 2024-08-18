@@ -41,12 +41,9 @@ objact_save = { --分度改变用的
     quit_click = quit_click + 1
 
     -- 读取文本文件 内容相同直接退出
-    local chart_file = io.open("chart.txt", "r")  -- 以只读模式打开文件
-    local ischart
-    if chart_file then
-        local content = chart_file:read("*a")  -- 读取整个文件内容
-        chart_file:close()  -- 关闭文件
-        ischart = loadstring("return "..content)()
+    local ischart = {}
+    if chart_info.chart_name[select_chart_pos] then
+        ischart = love.filesystem.read(chart_info.chart_name[select_chart_pos].path)  -- 以只读模式打开文件
     end
     if type(chart) ~= "table" then
         return

@@ -4,6 +4,7 @@ local ui_wipe = love.graphics.newImage("asset/ui_wipe.png")
 local ui_hold = love.graphics.newImage("asset/ui_hold_head.png")
 local ui_hold_body = love.graphics.newImage("asset/ui_hold_body.png")
 local ui_hold_tail = love.graphics.newImage("asset/ui_hold_tail.png")
+local pos = "edit"
 room_play = { -- 最基础的 播放页面
 load = function()
     objact_hit.load()
@@ -19,13 +20,19 @@ load = function()
     objact_slider.load(0,100,0,20,700)
 end,
 update = function(dt)
+    if not the_room_pos(pos) then
+        return
+    end
     objact_music_play.update(dt)
     objact_slider.update(dt)
     objact_hit.update(dt)
 end,
 
 draw = function()
-    love.graphics.setColor(1,1,1,1)
+    if not the_room_pos(pos) then
+        return
+    end
+    love.graphics.setColor(1,1,1,settings.bg_alpha / 100)
     if bg then -- 背景存在就显示
         local bg_width, bg_height = bg:getDimensions( ) -- 得到宽高
         local bg_scale_h = 1 / bg_height * 800 
@@ -106,96 +113,111 @@ draw = function()
             love.graphics.polygon("fill",x-450,settings.judge_line_y-y,x-450+w,settings.judge_line_y-y,0,note_occurrence_point*math.tan(math.rad(settings.angle))-y)
             --love.graphics.rectangle("fill",-1000,-1000,2000,2000)
         end
-        --使图片倾斜
-        local note_angle = math.acos( (x-450) / (settings.judge_line_y-note_occurrence_point *math.tan(math.rad(settings.angle)) ))
-        love.graphics.push()
-        love.graphics.translate(450, y)
-        love.graphics.stencil(myStencilFunction, "replace", 1)
-        love.graphics.setStencilTest("greater", 0)
-        love.graphics.shear(math.cos(note_angle),0)  -- 水平倾斜，适应轨道
 
-        if chart.note[i].type == "note" then
-            local _width, _height = ui_note:getDimensions() -- 得到宽高
-
-            local _scale_w = 1 / _width * to_3d_w
-
-            local _scale_h = 1 / _height * note_h
-            if y > 0 - note_h and y < 800 + note_h then
-                
-                love.graphics.draw(ui_note,to_3d_x
-                ,-note_h,0,_scale_w,_scale_h)
-            end
-            love.graphics.pop()  -- 恢复之前的变换状态 
-        elseif chart.note[i].type == "wipe" then
-            local _width, _height = ui_note:getDimensions() -- 得到宽高
-
-            local _scale_w = 1 / _width * to_3d_w
-
-            local _scale_h = 1 / _height * note_h
-            if y > 0 - note_h and y < 800 + note_h then
-                love.graphics.draw(ui_wipe,to_3d_x
-                ,-note_h,0,_scale_w,_scale_h)
-            end
-            love.graphics.pop()  -- 恢复之前的变换状态 
-        else --hold
-            local _width, _height = ui_note:getDimensions() -- 得到宽高
-
-            local _scale_w = 1 / _width * to_3d_w
-
-            local _scale_h = 1 / _height * note_h
-            if y > 0 - note_h and y < 800 + note_h then
-                love.graphics.draw(ui_hold,to_3d_x
-                ,-note_h,0,_scale_w,_scale_h)
-            end
-            love.graphics.pop() --提前释放 重新偏移
-            
+        if not  (y2 > 800 + note_h or y < 0 -  note_h) then
+            --使图片倾斜
+            local note_angle = math.acos( (x-450) / (settings.judge_line_y-note_occurrence_point *math.tan(math.rad(settings.angle)) ))
             love.graphics.push()
-            to_3d = (y2 -note_h -  note_occurrence_point * math.tan(math.rad(settings.angle))) / 
-                    (settings.judge_line_y - note_occurrence_point * math.tan(math.rad(settings.angle))) --变成伪3d y 比上长度
-            to_3d_w =  w *to_3d
-            _scale_w = 1 / _width * to_3d_w
-            to_3d_x = (original_x-450) *to_3d - to_3d_w/2
+            love.graphics.translate(450, y)
+            love.graphics.stencil(myStencilFunction, "replace", 1)
+            love.graphics.setStencilTest("greater", 0)
+            love.graphics.shear(math.cos(note_angle),0)  -- 水平倾斜，适应轨道
 
-            note_angle = math.acos( (x-450) / (settings.judge_line_y-note_occurrence_point *math.tan(math.rad(settings.angle)) ))
+            if chart.note[i].type == "note" then
+                local _width, _height = ui_note:getDimensions() -- 得到宽高
+
+                local _scale_w = 1 / _width * to_3d_w
+
+                local _scale_h = 1 / _height * note_h
+                if y > 0 - note_h and y < 800 + note_h then
+                
+                    love.graphics.draw(ui_note,to_3d_x
+                    ,-note_h,0,_scale_w,_scale_h)
+                end
+                love.graphics.pop()  -- 恢复之前的变换状态 
+            elseif chart.note[i].type == "wipe" then
+                local _width, _height = ui_note:getDimensions() -- 得到宽高
+
+                local _scale_w = 1 / _width * to_3d_w
+
+                local _scale_h = 1 / _height * note_h
+                if y > 0 - note_h and y < 800 + note_h then
+                    love.graphics.draw(ui_wipe,to_3d_x
+                    ,-note_h,0,_scale_w,_scale_h)
+                end
+                love.graphics.pop()  -- 恢复之前的变换状态 
+            else --hold
+                local _width, _height = ui_note:getDimensions() -- 得到宽高
+
+                local _scale_w = 1 / _width * to_3d_w
+
+                local _scale_h = 1 / _height * note_h
+                if y > 0 - note_h and y < 800 + note_h then
+                    love.graphics.draw(ui_hold,to_3d_x
+                    ,-note_h,0,_scale_w,_scale_h)
+                end
+                love.graphics.pop() --提前释放 重新偏移
+            
+                love.graphics.push()
+                to_3d = (y2 -note_h -  note_occurrence_point * math.tan(math.rad(settings.angle))) / 
+                        (settings.judge_line_y - note_occurrence_point * math.tan(math.rad(settings.angle))) --变成伪3d y 比上长度
+                to_3d_w =  w *to_3d
+                _scale_w = 1 / _width * to_3d_w
+                to_3d_x = (original_x-450) *to_3d - to_3d_w/2
+
+                note_angle = math.acos( (x-450) / (settings.judge_line_y-note_occurrence_point *math.tan(math.rad(settings.angle)) ))
             
 
-            if y2 > 0 - note_h and y2 < 800 + note_h and settings.angle == 90 then --尾
-                love.graphics.translate(450, y2)
-                love.graphics.shear(math.cos(note_angle),0)  -- 水平倾斜，适应轨道
-                love.graphics.draw(ui_hold_tail,to_3d_x
-                ,0,0,_scale_w,_scale_h)
-            end
+                if y2 > 0 - note_h and y2 < 800 + note_h and settings.angle == 90 then --尾
+                    love.graphics.translate(450, y2)
+                    love.graphics.shear(math.cos(note_angle),0)  -- 水平倾斜，适应轨道
+                    love.graphics.draw(ui_hold_tail,to_3d_x
+                    ,0,0,_scale_w,_scale_h)
+                end
 
-            love.graphics.pop() --提前释放 重新偏移
+                love.graphics.pop() --提前释放 重新偏移
 
-            local note_h2 = y - y2
-            local _scale_h2 = 1 / _height * note_h / 4
-            if y > 0 - note_h and y2 < 800 + note_h then
-                --把长条拆成一段段来渲染 以达到倾斜效果
-                for i = y2 + note_h ,y-note_h - note_h/4,note_h /4 do
-                    love.graphics.push()
+                local note_h2 = y - y2
+                local _scale_h2 = 1 / _height * note_h / 4
+                if y > 0 - note_h and y2 < 800 + note_h then
+                    --把长条拆成一段段来渲染 以达到倾斜效果
+                    for i = y2 + note_h ,y-note_h - note_h/4,note_h /4 do
+                        love.graphics.push()
                     
 
-                    to_3d = (i - note_occurrence_point * math.tan(math.rad(settings.angle))) / 
-                    (settings.judge_line_y - note_occurrence_point * math.tan(math.rad(settings.angle))) --变成伪3d y 比上长度
-                    to_3d_w =  w *to_3d 
-                    _scale_w = 1 / _width * to_3d_w
-                    to_3d_x = (original_x-450) *to_3d - to_3d_w/2
+                        to_3d = (i - note_occurrence_point * math.tan(math.rad(settings.angle))) / 
+                        (settings.judge_line_y - note_occurrence_point * math.tan(math.rad(settings.angle))) --变成伪3d y 比上长度
+                        to_3d_w =  w *to_3d 
+                        _scale_w = 1 / _width * to_3d_w
+                        to_3d_x = (original_x-450) *to_3d - to_3d_w/2
 
-                    note_angle = math.acos( (x-450) / (settings.judge_line_y-note_occurrence_point *math.tan(math.rad(settings.angle)) ))
-                    love.graphics.translate(450, i) --减去尾的位置
-                    love.graphics.shear(math.cos(note_angle),0)  -- 水平倾斜，适应轨道
+                        note_angle = math.acos( (x-450) / (settings.judge_line_y-note_occurrence_point *math.tan(math.rad(settings.angle)) ))
+                        love.graphics.translate(450, i) --减去尾的位置
+                        love.graphics.shear(math.cos(note_angle),0)  -- 水平倾斜，适应轨道
 
-                    love.graphics.draw(ui_hold_body,to_3d_x
-                    ,0,0,_scale_w,_scale_h2) --身
-                    love.graphics.pop()
+                        love.graphics.draw(ui_hold_body,to_3d_x
+                        ,0,0,_scale_w,_scale_h2) --身
+                        love.graphics.pop()
+                    end
                 end
-            end
             
+            end
+            love.graphics.setStencilTest()
         end
-        love.graphics.setStencilTest()
     end
+    love.graphics.setColor(0,0,0,1) --判定线 play
 
+    love.graphics.rectangle("fill",0,settings.judge_line_y - 3,900,16) --2是为了对其中心
+
+    love.graphics.setColor(1,1,1,1) --判定线 play
+
+    love.graphics.rectangle("line",0,settings.judge_line_y - 3,900,16) --2是为了对其中心
+
+    love.graphics.setColor(0.7,0.7,0.7,0.5) --判定线内部
+    love.graphics.rectangle("fill",0,settings.judge_line_y,900,10)
+
+    --hit
+    objact_hit.draw()
 
     if demo_mode == true then
         return
@@ -213,7 +235,7 @@ draw = function()
     love.graphics.setColor(1,1,1,1) --判定线
     love.graphics.rectangle("fill",900,settings.judge_line_y,275,10)
 
-    love.graphics.rectangle("line",0,settings.judge_line_y,900,10)
+    
 
 
     
@@ -226,8 +248,8 @@ draw = function()
             for isdenom=1,denom.denom - 1 do --分度刷新
                 local denom_beat = (1 / denom.denom)* isdenom 
                 beat_y = beat_to_y(isbeat - denom_beat)
-
-                if denom_size > 0 and denom_size < 10 then
+                if beat_y > 0 and beat_y < 800 then
+                    if denom_size > 0 and denom_size < 10 then
                         love.graphics.setColor(RGBA_hexToRGBA("#FF646464"))
 
                         if denom.denom % 3 == 0 and denom.denom % 4 ~= 0 then
@@ -241,7 +263,8 @@ draw = function()
                         if isdenom  == denom.denom / 2 then --中线
                             love.graphics.setColor(RGBA_hexToRGBA("#FF7FFFF4"))
                         end
-                    love.graphics.rectangle("fill",0,beat_y,1175,1)
+                        love.graphics.rectangle("fill",0,beat_y,1175,1)
+                    end
                 end
             end
             love.graphics.setColor(RGBA_hexToRGBA("#FFFFFFFF"))
@@ -441,13 +464,14 @@ draw = function()
     --进度条
     objact_slider.draw()
 
-    --hit
-    objact_hit.draw()
 
     --复制粘贴相关
     objact_copy.draw()
 end,
 keypressed = function(key)
+    if not the_room_pos(pos) then
+        return
+    end
     if mouse.x > 1200 then  --限制范围
         return
     end
@@ -469,6 +493,9 @@ keypressed = function(key)
 end,
 
 wheelmoved = function(x,y)
+    if not the_room_pos(pos) then
+        return
+    end
     if mouse.x > 1200 then  --限制范围
         return
     end
@@ -507,6 +534,9 @@ wheelmoved = function(x,y)
         
 end,
 mousepressed = function( x, y, button, istouch, presses )
+    if not the_room_pos(pos) then
+        return
+    end
     objact_denom.mousepressed( x, y, button, istouch, presses )
     objact_music_speed.mousepressed( x, y, button, istouch, presses )
     objact_track_scale.mousepressed( x, y, button, istouch, presses )
@@ -519,19 +549,30 @@ mousepressed = function( x, y, button, istouch, presses )
     objact_note_edit_inplay.mousepressed(x, y, button, istouch, presses)
 end,
 textinput = function(input)
+    if not the_room_pos(pos) then
+        return
+    end
     objact_denom.textinput(input)
     objact_music_speed.textinput(input)
     objact_track_scale.textinput(input)
     objact_track.textinput(input)
 end,
 mousereleased = function( x, y, button, istouch, presses )
+    if not the_room_pos(pos) then
+        return
+    end
     objact_slider.mousereleased(x, y, button, istouch, presses)
     objact_copy.mousereleased(x, y, button, istouch, presses)
 end,
 keyreleased = function(key)
-
+    if not the_room_pos(pos) then
+        return
+    end
 end,
 quit = function()
+    if not the_room_pos(pos) then
+        return
+    end
     return objact_save.quit()
 end
 }

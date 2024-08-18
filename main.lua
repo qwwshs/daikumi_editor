@@ -1,4 +1,5 @@
 utf8 = require("utf8")
+require("socket") --网络通信
 
 require("function/beat_and_time")
 require("function/log")
@@ -6,12 +7,15 @@ require("function/string")
 require("function/table")
 require("function/save")
 require("function/RGB")
+dkjson = require("function/dkjson")
+require("function/mc_to_dakumi")
 require("function/input_box")
 require("function/bezier")
 require("function/math")
 require("function/switch")
 require("function/note")
 require("function/event")
+require("room/select")
 require("room/play")
 require("room/sidebar")
 require("objact/button_denom")
@@ -30,6 +34,9 @@ require('objact/event_edit_bezier')
 require('objact/button_track')
 require('objact/button_chart_info')
 require('objact/button_event_edit_default_bezier')
+require('objact/button_delete_chart')
+require('objact/button_open_chart_list')
+require('objact/button_edit_chart')
 require('objact/button_break')
 require('objact/button_settings')
 require('objact/button_to_github')
@@ -42,7 +49,8 @@ require('objact/settings')
 require('objact/demo_mode')
 require('objact/language')
 
-version = "0.0.3"
+
+version = "0.1.1"
 beat = {nowbeat = 0,allbeat = 100}
 time = {nowtime = 0 ,alltime = 100}
 denom = {scale = 1,denom = 4} --分度的缩放和使用的分度
@@ -52,11 +60,13 @@ language = {} --语言表
 bg = nil
 music = nil
 music_data = {count = 0,soundData = nil} --音频可视化用的
+room_pos = "select" --所属房间
 
 music_play = false
 mouse  = {x = 0,y = 0,original_x = 0,original_y = 0, down_state = false}--鼠标按下状态
 elapsed_time = 0 -- 已运行时间
 font = love.graphics.newFont("LXGWNeoXiHei.ttf", 13) -- 字体 
+font_plus = love.graphics.newFont("LXGWNeoXiHei.ttf", 26) -- 字体 plus
 isctrl  = false --ctrl按下状态
 iskeyboard = {} --key的按下状态
 note_occurrence_point = -1000 --note出现点 （斜轨用的）
@@ -64,7 +74,7 @@ music_speed = 1 --播放速度
 demo_mode = false --演示状态
 window_w_scale = 1
 window_h_scale = 1
-local meta_chart = { --谱面基本格式 元表
+meta_chart = { --谱面基本格式 元表
     __index ={
         bpm_list = {
             {beat = {0,0,1},bpm = 120},
@@ -81,7 +91,7 @@ local meta_chart = { --谱面基本格式 元表
         }
     }
 }
-local meta_settings = { --设置基本格式 元表
+meta_settings = { --设置基本格式 元表
     __index ={
         
         judge_line_y = 700,
@@ -97,24 +107,30 @@ local meta_settings = { --设置基本格式 元表
         contact_roller = 1, --鼠标滚动系数
         note_alpha = 100,
         note_height = 75,
+        bg_alpha = 50,
     }
 }
+
+
+function the_room_pos(pos) -- 房间状态判定
+    return pos == room_pos
+end
 
 function love.load()
     --初始化
     love.graphics.setFont(font)
     -- 读取文本文件
-    local chart_file = io.open("chart.txt", "r")  -- 以只读模式打开文件
-    if chart_file then
-        local content = chart_file:read("*a")  -- 读取整个文件内容
-        chart_file:close()  -- 关闭文件
-        chart = loadstring("return "..content)()
-    end
-    if type(chart) ~= "table" then
-        chart = {}
-    end
+    --local chart_file = io.open("chart.txt", "r")  -- 以只读模式打开文件
+    --if chart_file then
+    --    local content = chart_file:read("*a")  -- 读取整个文件内容
+    --    chart_file:close()  -- 关闭文件
+    --    chart = loadstring("return "..content)()
+    --end
+    --if type(chart) ~= "table" then
+    --    chart = {}
+    --end
     setmetatable(chart,meta_chart) --防谱报废
-    fillMissingElements(chart,meta_chart.__index)
+    --fillMissingElements(chart,meta_chart.__index)
         -- 读取语言
         local language_file = io.open("language.txt", "r")  -- 以只读模式打开文件
         if language_file then
@@ -142,39 +158,39 @@ function love.load()
     fillMissingElements(settings,meta_settings.__index)
     love.window.setVSync( settings.vsync  )
 
-        local music_esist = false
-        music_error = ""
-        -- 读取音频文件
-        local music_file = io.open("music.wav", "r")  -- 以只读模式打开文件
-        local music_file2 = io.open("music.ogg", "r")  -- 以只读模式打开文件
-        local music_file3 = io.open("music.mp3", "r")  -- 以只读模式打开文件
-        if music_file then
-            music_esist,music_error = pcall(function() music = love.audio.newSource("music.wav", "stream") music_data.soundData = love.sound.newSoundData("music.wav")  end)
-        elseif music_file2 then
-            music_esist,music_error = pcall(function() music = love.audio.newSource("music.ogg", "stream") music_data.soundData = love.sound.newSoundData("music.wav") end)
-        elseif music_file3 then
-            music_esist,music_error = pcall(function() music = love.audio.newSource("music.mp3", "stream") music_data.soundData = love.sound.newSoundData("music.wav") end)
-        end
-        if music_esist then
-            music_data.count = music_data.soundData:getSampleCount() --用来显示音频图
-            time.alltime = music:getDuration() + chart.offset / 1000 -- 得到音频总时长
-            beat.allbeat = time_to_beat(chart.bpm_list,time.alltime)
-        end
+    --    local music_esist = false
+    --    music_error = ""
+    --    -- 读取音频文件
+    --    local music_file = io.open("music.wav", "r")  -- 以只读模式打开文件
+    --    local music_file2 = io.open("music.ogg", "r")  -- 以只读模式打开文件
+    --    local music_file3 = io.open("music.mp3", "r")  -- 以只读模式打开文件
+    --    if music_file then
+    --        music_esist,music_error = pcall(function() music = love.audio.newSource("music.wav", "stream") music_data.soundData = love.sound.newSoundData("music.wav")  end)
+    --    elseif music_file2 then
+    --        music_esist,music_error = pcall(function() music = love.audio.newSource("music.ogg", "stream") music_data.soundData = love.sound.newSoundData("music.wav") end)
+    --    elseif music_file3 then
+    --        music_esist,music_error = pcall(function() music = love.audio.newSource("music.mp3", "stream") music_data.soundData = love.sound.newSoundData("music.wav") end)
+    --    end
+    --    if music_esist then
+    --        music_data.count = music_data.soundData:getSampleCount() --用来显示音频图
+    --        time.alltime = music:getDuration() + chart.offset / 1000 -- 得到音频总时长
+    --        beat.allbeat = time_to_beat(chart.bpm_list,time.alltime)
+    --    end
 
 
-    local bg_flie = io.open("bg.png", "r")  -- 以只读模式打开文件
-    local bg_flie2 = io.open("bg.jpg", "r")  -- 以只读模式打开文件
-    bg_esist,bg_error = false,""
-    if bg_flie then
-    -- 读取图片文件
-        bg_esist,bg_error = pcall(function() bg = love.graphics.newImage("bg.png") end)
-    elseif bg_flie2 then
-        -- 读取图片文件
-        bg_esist,bg_error = pcall(function() bg = love.graphics.newImage("bg.jog") end)
-    end
-
-	room_play.load()
+    --local bg_flie = io.open("bg.png", "r")  -- 以只读模式打开文件
+    --local bg_flie2 = io.open("bg.jpg", "r")  -- 以只读模式打开文件
+    --bg_esist,bg_error = false,""
+    --if bg_flie then
+    ---- 读取图片文件
+    --    bg_esist,bg_error = pcall(function() bg = love.graphics.newImage("bg.png") end)
+    --elseif bg_flie2 then
+    --    -- 读取图片文件
+    --    bg_esist,bg_error = pcall(function() bg = love.graphics.newImage("bg.jpg") end)
+    --end
+    room_play.load()
     room_sidebar.load()
+    room_select.load()
     objact_mouse.load()
     log("start")
     objact_message_box.message("start")
@@ -183,6 +199,14 @@ function love.load()
     
 end
 function love.update(dt)
+    if love.window.getFullscreen()  then  --全屏
+        local width, height = love.graphics.getDesktopDimensions()   
+        if height / 800 ~= window_h_scale  and width / 1600 ~= window_w_scale then --窗口缩放不等于全屏的缩放
+            window_w_scale = width / 1600
+            window_h_scale = height / 800
+            
+        end
+    end
     mouse.original_x, mouse.original_y = love.mouse.getPosition( ) --对缩放进行处理
     mouse.x = mouse.original_x / window_w_scale
     mouse.y = mouse.original_y / window_h_scale
@@ -192,15 +216,13 @@ function love.update(dt)
     objact_message_box.update(dt)
 end
 function love.draw()
-    
-    
-    love.graphics.scale(window_w_scale, window_h_scale)
+    love.graphics.scale(window_w_scale,window_h_scale)
     objact_demo_mode.draw()
     room_play.draw()
     room_sidebar.draw()
     objact_message_box.draw()
+    room_select.draw()
     objact_mouse.draw()
-
 end
 
 function love.keypressed(key)
@@ -219,6 +241,7 @@ function love.keypressed(key)
     objact_message_box.message(key)
     input_box_key(key) --所有键入内容都照样读的 直接塞主函数
     objact_demo_mode.keyboard(key)
+    room_select.keypressed(key)
 end
 function love.keyreleased(key)
     if message_window == true then
@@ -236,6 +259,8 @@ function love.wheelmoved(x, y)
     end
     room_play.wheelmoved(x,y)
     room_sidebar.wheelmoved(x,y)
+    room_select.wheelmoved(x,y)
+
 end
 
 function love.mousepressed( x, y, button, istouch, presses )
@@ -249,7 +274,8 @@ function love.mousepressed( x, y, button, istouch, presses )
     room_play.mousepressed( x, y, button, istouch, presses )
     room_sidebar.mousepressed( x, y, button, istouch, presses )
     objact_mouse.mousepressed( x, y, button, istouch, presses )
-    
+    room_select.mousepressed( x, y, button, istouch, presses )
+
 end
 
 function love.mousereleased( x, y, button, istouch, presses )
@@ -262,6 +288,7 @@ function love.mousereleased( x, y, button, istouch, presses )
     objact_mouse.mousereleased( x, y, button, istouch, presses )
     room_sidebar.mousereleased( x, y, button, istouch, presses )
     room_play.mousereleased(x, y, button, istouch, presses)
+    room_select.mousereleased( x, y, button, istouch, presses )
 end
 
 function love.textinput(input)
@@ -285,7 +312,14 @@ function love.resize( w, h )
 end
 
 
+function love.directorydropped( path ) --文件夹拖入
+    room_select.directorydropped( path ) --文件夹拖入
 
+end
+
+function love.filedropped( file ) --文件拖入
+    room_select.filedropped( file ) --文件拖入
+end
 
 -- 错误处理
 

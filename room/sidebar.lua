@@ -1,4 +1,5 @@
 displayed_content = "nil" --显示的内容
+local pos  = "edit"
 --侧边栏
 function room_type(type) -- 房间状态判定
     return type == displayed_content
@@ -12,10 +13,16 @@ room_sidebar = {
         
     end,
     update = function(dt)
+        if not the_room_pos(pos) then
+            return
+        end
         objact_event_edit.update(dt)
     end,
     
     draw = function()
+        if not the_room_pos(pos) then
+            return
+        end
         love.graphics.setColor(0.6,0.6,0.6,0.5)
         love.graphics.rectangle("fill",1200,0,400,800) --背景板
         objact_button_chart_info.draw()
@@ -33,6 +40,9 @@ room_sidebar = {
         love.graphics.print(objact_language.get_string_in_languages("version")..version,1200,780)
     end,
     keypressed = function(key)
+        if not the_room_pos(pos) then
+            return
+        end
         objact_chart_info.keypressed(key)
         objact_settings.keypressed(key)
         objact_event_edit.keypressed(key)
@@ -42,6 +52,9 @@ room_sidebar = {
     end,
     
     wheelmoved = function(x,y)
+        if not the_room_pos(pos) then
+            return
+        end
         if mouse.x < 1200 then --限制范围
             return
         end
@@ -49,6 +62,9 @@ room_sidebar = {
         objact_settings.wheelmoved(x,y)
     end,
     mousepressed = function( x, y, button, istouch, presses )
+        if not the_room_pos(pos) then
+            return
+        end
         objact_button_settings.mousepressed( x, y, button, istouch, presses )
         objact_button_chart_info.mousepressed( x, y, button, istouch, presses )
         objact_chart_info.mousepressed( x, y, button, istouch, presses )
@@ -60,6 +76,9 @@ room_sidebar = {
         end
     end,
     mousereleased = function( x, y, button, istouch, presses )
+        if not the_room_pos(pos) then
+            return
+        end
         objact_event_edit.mousereleased( x, y, button, istouch, presses )
     end,
 }

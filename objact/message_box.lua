@@ -59,6 +59,7 @@ objact_message_box = {
 
     end,
     message_window_dlsplay = function(str,func,func_no) --打开一个消息盒子
+        demo_mode = false --关闭演示模式
         message_window = true
         window_str = str
         window_func = func

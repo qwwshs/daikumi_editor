@@ -31,6 +31,7 @@ objact_settings = {
             mouse=  "switch1",
             note_alpha =  "input_box",
             note_height =  "input_box",
+            bg_alpha =  "input_box",
         }
         if not room_type(type) then
             return
