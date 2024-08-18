@@ -191,6 +191,10 @@ room_select = {
             --输出选择到的谱面的谱面信息
             chart_info =  {song_name = nil,bg = nil,chart_name = {},song = nil}
             local file_tab = love.filesystem.getDirectoryItems("chart/"..chart_tab[select_music_pos]) --得到谱面文件夹下的所有谱面
+            chart = {} --重置
+            setmetatable(chart,meta_chart) --防谱报废
+
+            fillMissingElements(chart,meta_chart.__index)
             for i,v in ipairs(file_tab) do
                 if string.find(v,".txt") then --谱面文件
                     local info = love.filesystem.read("chart/"..chart_tab[select_music_pos].."/"..v)
@@ -200,19 +204,37 @@ room_select = {
                     end
                     setmetatable(info,meta_chart) --防谱报废
                     fillMissingElements(info,meta_chart.__index)
+
+                    chart = copyTable(info) --读取谱面
+                    setmetatable(chart,meta_chart) --防谱报废
+
+                    fillMissingElements(chart,meta_chart.__index)
                     chart_info.song_name = info.info.song_name
                     chart_info.chart_name[#chart_info.chart_name + 1] = {name = info.info.chart_name,
-                            path = "chart/"..chart_tab[select_music_pos].."/"..v}
-
+                    path = "chart/"..chart_tab[select_music_pos].."/"..v}
+                    
                 end
                 if string.find(v,".jpg") or string.find(v,".png") then --bg
                     chart_info.bg = love.graphics.newImage("chart/"..chart_tab[select_music_pos].."/"..v)
+
+                    bg = love.graphics.newImage("chart/"..chart_tab[select_music_pos].."/"..v)
                 end
+                
+            end
+            for i,v in ipairs(file_tab) do --因为一些数据在chart里面 所以分开读
                 if string.find(v,".mp3") or string.find(v,".ogg") or string.find(v,".wav") then --歌曲
                     love.audio.stop( ) --停止上一个歌曲
                     chart_info.song = love.audio.newSource("chart/"..chart_tab[select_music_pos].."/"..v, "stream")
                     love.audio.setVolume( settings.music_volume / 100 ) --设置音量大小
                     chart_info.song:play()
+    
+                    --读取音频信息
+                    music = love.audio.newSource("chart/"..chart_tab[select_music_pos].."/"..v, "stream")
+                    music_data.soundData = love.sound.newSoundData("chart/"..chart_tab[select_music_pos].."/"..v)
+    
+                    music_data.count = music_data.soundData:getSampleCount() --用来显示音频图
+                    time.alltime = music:getDuration() + chart.offset / 1000 -- 得到音频总时长
+                    beat.allbeat = time_to_beat(chart.bpm_list,time.alltime)
                 end
             end
             if not chart_info.song then
