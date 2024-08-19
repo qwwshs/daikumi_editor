@@ -46,5 +46,6 @@
   ##**相关**  
   [LxgwNeoXiHei](https://github.com/lxgw/LxgwNeoXiHei)  
   [love2d](https://github.com/love2d/love) 
-  [dkjson](https://github.com/LuaDist/dkjson)
+  [dkjson](https://github.com/LuaDist/dkjson)  
+  [nativefs](https://github.com/zorggn/nativefs)
   
