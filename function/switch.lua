@@ -1,4 +1,4 @@
---输入框
+--开关
 local switch_objact = {} --对象
 local input_string = ""
 

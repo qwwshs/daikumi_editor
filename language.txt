@@ -6,6 +6,7 @@
 {'mouse','鼠标显示'},
 {'hit_volume','打击音量'},
 {'hit_sound','打击音'},
+{'hit','打击'},
 {'vsync','垂直同步'},
 {'language','语言'},
 {'contact_roller','鼠标滚动系数'},
@@ -42,4 +43,8 @@
 {'wipe place','wipe放置'},
 {'hold place','hold放置'},
 {'audio_picture','音频图'},
+{'You can drag the chart or folder containing the chart or song to the window for import.','你可以拖动chart或包含chart的文件夹或歌曲到窗口导入。'},
+{"delete?",'删除？'},
+{"file selector",'文件选择器'},
+{"break",'返回'},
 }

@@ -45,7 +45,7 @@ function input_box_mousepressed(x,y) --查询
             if input_box_objact[i].type ~= "number" and type(input_string) ~= 'string' then
                 input_string = "1"
             end
-            loadstring("_G."..input_box_objact[i].var.."=".. "to"..input_box_objact[i].type.."('"..input_string.."')")()
+            loadstring("_G."..input_box_objact[i].var.."=".. "to"..input_box_objact[i].type.."([["..input_string.."]])")()
             input_string = " "
             input_string_index = 1
         end -- 赋值
@@ -136,7 +136,7 @@ function input_box_key(key) --键入内容
                 input_string = "1"
             end
             if input_box_objact[i].in_input == true then
-                loadstring("_G."..input_box_objact[i].var.."=".. "to"..input_box_objact[i].type.."('"..input_string.."')")()
+                loadstring("_G."..input_box_objact[i].var.."=".. "to"..input_box_objact[i].type.."([["..input_string.."]])")()
                 input_box_objact[i].in_input = false
             end
         end

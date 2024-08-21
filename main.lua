@@ -1,15 +1,16 @@
 utf8 = require("utf8")
-require("socket") --网络通信
-
+socket = require("socket") --网络通信
 require("function/beat_and_time")
 require("function/log")
 require("function/string")
 require("function/table")
 require("function/save")
 require("function/RGB")
+nativefs = require("function/nativefs")
 dkjson = require("function/dkjson")
 require("function/mc_to_dakumi")
 require("function/input_box")
+require("function/button")
 require("function/bezier")
 require("function/math")
 require("function/switch")
@@ -40,6 +41,7 @@ require('objact/button_edit_chart')
 require('objact/button_break')
 require('objact/button_settings')
 require('objact/button_to_github')
+require('objact/button_select_file')
 require('objact/chart_info')
 require('objact/bpm_list')
 require('objact/slider')
@@ -48,9 +50,11 @@ require('objact/redo')
 require('objact/settings')
 require('objact/demo_mode')
 require('objact/language')
-
-
-version = "0.1.1"
+require('objact/file_selector')
+require('objact/selector_break')
+require('objact/selector_close')
+require('objact/selector_refresh')
+version = "0.1.2"
 beat = {nowbeat = 0,allbeat = 100}
 time = {nowtime = 0 ,alltime = 100}
 denom = {scale = 1,denom = 4} --分度的缩放和使用的分度

@@ -35,20 +35,11 @@ draw = function()
     love.graphics.setColor(1,1,1,settings.bg_alpha / 100)
     if bg then -- 背景存在就显示
         local bg_width, bg_height = bg:getDimensions( ) -- 得到宽高
-        local bg_scale_h = 1 / bg_height * 800 
-        local bg_scale_w = 1 / bg_height * 800 / (window_w_scale / window_h_scale)
-        if 1 / bg_height * 800 / (window_h_scale / window_w_scale) < 1 / bg_width * 900 / (window_w_scale / window_h_scale) then
             bg_scale_h = 1 / bg_width * 900 / (window_h_scale / window_w_scale)
             bg_scale_w = 1 / bg_width * 900
-        end
         if demo_mode == true then
-            bg_scale_h = 1 / bg_height * 800 
-            bg_scale_w = 1 / bg_height * 800 / (window_w_scale / window_h_scale) / ((1600/900)/(1 + 150 / 800))
-            if 1 / bg_height * 800 / (window_h_scale / window_w_scale)  / ((1 + 150 / 800) / (1600/900)) <
-            1 / bg_width * 900 / (window_w_scale / window_h_scale) / ((1600/900)/(1 + 150 / 800)) then
-                bg_scale_h = 1 / bg_width * 900 / (window_h_scale / window_w_scale)   / ((1 + 150 / 800) / (1600/900))
-                bg_scale_w = 1 / bg_width * 900
-            end
+            bg_scale_h = 1 / bg_width * 900 / (window_h_scale / window_w_scale)   / ((1 + 150 / 800) / (1600/900))
+            bg_scale_w = 1 / bg_width * 900
         end
 
         love.graphics.draw(bg,0,0,0,bg_scale_w,bg_scale_h)
@@ -57,35 +48,41 @@ draw = function()
     love.graphics.setColor(RGBA_hexToRGBA("#64000000")) --游玩区域显示的背景板
     love.graphics.rectangle("fill",0,0,900,800)
 
-    
+    local drawed_track = {} --已经绘制的track
     for i=1 ,#chart.event do --轨道底板绘制
-        local x,w = event_get(chart.event[i].track,beat.nowbeat)
-        x,w =  (x-w/2) *9,w*9 --为了居中
-        --倾斜计算
-        love.graphics.setColor(0,0,0,1)  --底板
-        love.graphics.polygon("fill",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
-
+        if drawed_track[chart.event[i].track] == nil then
+            local x,w = event_get(chart.event[i].track,beat.nowbeat)
+            x,w =  (x-w/2) *9,w*9 --为了居中
+            --倾斜计算
+            love.graphics.setColor(0,0,0,0.5 )  --底板
+            love.graphics.polygon("fill",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
+            drawed_track[chart.event[i].track] = true
+        end
     end
     local draw_exist = false --选择时底板已经绘制
+    drawed_track = {} --已经绘制的track
     for i=1 ,#chart.event do --轨道侧线绘制
-        local x,w = event_get(chart.event[i].track,beat.nowbeat)
-        x,w =  (x-w/2) *9,w*9 --为了居中
-        --倾斜计算
+        if drawed_track[chart.event[i].track] == nil then
+            local x,w = event_get(chart.event[i].track,beat.nowbeat)
+            x,w =  (x-w/2) *9,w*9 --为了居中
+            --倾斜计算
 
-        if track.track == chart.event[i].track and draw_exist == false and demo_mode == false then --选择时的底板
-            draw_exist = true
-            love.graphics.setColor(1,1,1,0.2) 
-            love.graphics.polygon("fill",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
-        end
-        
-        love.graphics.setColor(1,1,1,1) --侧线
-        love.graphics.polygon("line",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
-        love.graphics.setColor(1,1,1,1) --轨道编号
-        if demo_mode == false then
-            if track.track == chart.event[i].track then
-                love.graphics.setColor(0,1,1,1) --轨道编号
+            if track.track == chart.event[i].track and draw_exist == false and demo_mode == false then --选择时的底板
+                draw_exist = true
+                love.graphics.setColor(1,1,1,0.2) 
+                love.graphics.polygon("fill",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
             end
-            love.graphics.print(chart.event[i].track,x+w/2,settings.judge_line_y+20) --为了居中
+        
+            love.graphics.setColor(1,1,1,1) --侧线
+            love.graphics.polygon("line",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
+            love.graphics.setColor(1,1,1,1) --轨道编号
+            if demo_mode == false then
+                if track.track == chart.event[i].track then
+                    love.graphics.setColor(0,1,1,1) --轨道编号
+                end
+                love.graphics.print(chart.event[i].track,x+w/2,settings.judge_line_y+20) --为了居中
+            end
+            drawed_track[chart.event[i].track] = true
         end
     end
 
@@ -313,41 +310,29 @@ draw = function()
     love.graphics.setColor(1,1,1,1)
     --note(edit区域渲染)
     for i=1,#chart.note do
-
-        local y = beat_to_y(chart.note[i].beat)
-        local y2 = y
-        if chart.note[i].type == "hold" then
-            y2 = beat_to_y(chart.note[i].beat2)
-        end
-
         if chart.note[i].track == track.track then
-            if chart.note[i].type == "note" then
-                
-                if y > 0 - note_h and y < 800 + note_h then
-                    love.graphics.draw(ui_note,900,y-note_h,0,_scale_w,_scale_h)
-                end
-            elseif chart.note[i].type == "wipe" then
-                if y > 0 - note_h and y < 800 + note_h then
-                    love.graphics.draw(ui_wipe,900,y-note_h,0,_scale_w,_scale_h)
-                end
-            else --hold
-
-                if y > 0 - note_h and y < 800 + note_h then
-                    love.graphics.draw(ui_hold,900,y-note_h,0,_scale_w,_scale_h) -- 头
-                end
-                    
-                local note_h2 = y - y2 -note_h * 2
-                local _scale_h2 = 1 / _height * note_h2
-                if y2 > 0 - note_h and y2 < 800 + note_h then
-                    love.graphics.draw(ui_hold_tail,900,y2,0,_scale_w,_scale_h) -- 尾
-                end
-
-                if y > 0 - note_h  and y2 < 800 + note_h then
-                    love.graphics.draw(ui_hold_body,900,y2+note_h,0,_scale_w,_scale_h2) --身
-                end
-
+            local y = beat_to_y(chart.note[i].beat)
+            local y2 = y
+            if chart.note[i].type == "hold" then
+                y2 = beat_to_y(chart.note[i].beat2)
             end
+            if not (y2 > 800 + note_h or y < -note_h) then
+        
+                if chart.note[i].type == "note" then
+                    love.graphics.draw(ui_note,900,y-note_h,0,_scale_w,_scale_h)
+                elseif chart.note[i].type == "wipe" then
+                
+                        love.graphics.draw(ui_wipe,900,y-note_h,0,_scale_w,_scale_h)
+                else --hold
 
+                        love.graphics.draw(ui_hold,900,y-note_h,0,_scale_w,_scale_h) -- 头
+                    local note_h2 = y - y2 -note_h * 2
+                    local _scale_h2 = 1 / _height * note_h2
+                    love.graphics.draw(ui_hold_tail,900,y2,0,_scale_w,_scale_h) -- 尾
+                    love.graphics.draw(ui_hold_body,900,y2+note_h,0,_scale_w,_scale_h2) --身
+
+                end
+            end
         end
         
     end
@@ -382,19 +367,15 @@ draw = function()
                 if chart.event[i].type == "w" then
                     x_pos = 1100
                 end
-                if y > 0 - event_h and y < 800 + event_h then
+                if not (y2 > 800 + note_h or y < -note_h) then
                     love.graphics.draw(ui_hold,x_pos,y-event_h,0,_scale_w,_scale_h) -- 头
                     love.graphics.print(chart.event[i].form,x_pos+37.5-#tostring(chart.event[i].form)*3.5,y-event_h) -- 头 初始
-                end
-                if y > 0 - event_h  and y2 < 800 + event_h then
+
                     love.graphics.draw(ui_hold_body,x_pos,y2+event_h,0,_scale_w,_scale_h2) --身
-                end
-                if y2 > 0 - event_h and y2 < 800 + event_h then
+
                     love.graphics.draw(ui_hold_tail,x_pos,y2,0,_scale_w,_scale_h) --尾
                     love.graphics.print(chart.event[i].to,x_pos+37.5-#tostring(chart.event[i].to)*3.5,y2) --尾 结尾 --tostring是为了居中
-                end
                 -- beizer曲线
-                if y > 0 - event_h  and y2 < 800 + event_h then
                     for k = 1,10 do
                         local nowx = low_bezier(1,10,(chart.event[i].form - 50) / 100 * 75 + x_pos +37.5,x_pos + 37.5 + (chart.event[i].to - 50) / 100 *75,chart.event[i].trans,k) --减去50是为了使50居中
                         local nowy = y + (y2 - y) * k / 10

@@ -22,9 +22,12 @@ objact_mouse = { -- 鼠标
     mousepressed = function( x, y, button, istouch, presses )
         r = 10 
         if settings.mouse == 1 then
-            --love.mouse.setVisible( true )
+            love.mouse.setVisible( true )
         elseif settings.mouse == 0 then
-            --love.mouse.setVisible( false )
+            love.mouse.setVisible( false )
+        end
+        if demo_mode == true then
+            love.mouse.setVisible( false )
         end
         
     end,

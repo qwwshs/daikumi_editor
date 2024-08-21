@@ -12,11 +12,22 @@ room_select = {
     load = function()
         local dir = love.filesystem.getIdentity() --文件的写入目录
         local is_chart,is_chart_type = love.filesystem.getInfo( "chart" ) --得到chart文件夹是否存在
-        if not (is_chart) or is_chart_type ~= directory then
+        if not (is_chart) or is_chart_type ~= 'directory' then
             love.filesystem.createDirectory("chart" )
         end
         chart_tab = love.filesystem.getDirectoryItems("chart" ) --得到谱面文件夹下的所有谱面
         
+        local is_temporary,is_temporary_type = love.filesystem.getInfo( "temporary" ) --得到local文件夹是否存在
+        if not (is_temporary) or is_temporary_type ~= 'directory' then
+            love.filesystem.createDirectory("temporary" )
+        end
+        local temporary_tab = love.filesystem.getDirectoryItems("temporary" ) --得到文件夹下的所有谱面
+        for i ,v in ipairs(temporary_tab) do
+            love.filesystem.remove("temporary".."/"..v)
+        end
+
+        
+
         if chart_tab[select_music_pos] then
             chart_info = {song_name = nil,bg = nil,chart_name = {},song = nil} --谱面的信息
             --输出选择到的谱面的谱面信息
@@ -24,7 +35,7 @@ room_select = {
             for i,v in ipairs(file_tab) do
                 if string.find(v,".txt") then --谱面文件
                     local info = love.filesystem.read("chart/"..chart_tab[select_music_pos].."/"..v)
-                    local info = loadstring("return "..info)()
+                    pcall(function() info = loadstring("return "..info)() end)
                     if type(info) ~= "table" then
                         info = {}
                     end
@@ -68,9 +79,11 @@ room_select = {
                 love.audio.stop( ) --停止上一个歌曲
             end
         end
-            objact_delete_chart.load(300,100,0,200,100)
-            objact_edit_chart.load(300,220,0,200,100)
-            objact_open_chart_list.load(300,340,0,200,100)
+            objact_edit_chart.load(300,0,0,100,50)
+            objact_delete_chart.load(300,100,0,100,50)
+            objact_open_chart_list.load(400,200,0,100,50)
+            objact_select_file.load(400,300,0,100,50)
+            objact_selector.load(500,0,0,1100,800)
     end,
     draw = function()
         if not the_room_pos(pos) then
@@ -147,6 +160,8 @@ room_select = {
         objact_delete_chart.draw()
         objact_edit_chart.draw()
         objact_open_chart_list.draw()
+        objact_select_file.draw()
+        objact_selector.draw()
 
         love.graphics.setFont(font)
 
@@ -156,9 +171,18 @@ room_select = {
         if not the_room_pos(pos) then
             return
         end
+        objact_selector.keyboard(key)
+        if selector_file_open == true then
+            return
+        end
+
     end,
     wheelmoved = function(x,y)
         if not the_room_pos(pos) then
+            return
+        end
+        objact_selector.wheelmoved(x,y)
+        if selector_file_open == true then
             return
         end
         if mouse.x > 800 and mouse.x < 1600 then
@@ -177,6 +201,10 @@ room_select = {
     end,
     mousepressed = function( x, y, button, istouch, presses )
         if not the_room_pos(pos) then
+            return
+        end
+        objact_selector.mousepressed(x,y,button,istouch,presses)
+        if selector_file_open == true then
             return
         end
         --点击选择谱面
@@ -198,7 +226,7 @@ room_select = {
             for i,v in ipairs(file_tab) do
                 if string.find(v,".txt") then --谱面文件
                     local info = love.filesystem.read("chart/"..chart_tab[select_music_pos].."/"..v)
-                    local info = loadstring("return "..info)()
+                    pcall(function() info = loadstring("return "..info)() end)
                     if type(info) ~= "table" then
                         info = {}
                     end
@@ -255,6 +283,7 @@ room_select = {
         objact_delete_chart.mousepressed(x,y,button,istouch,presses)
         objact_edit_chart.mousepressed(x,y,button,istouch,presses)
         objact_open_chart_list.mousepressed(x,y,button,istouch,presses)
+        objact_select_file.mousepressed(x,y,button,istouch,presses)
 
 
     end,
@@ -271,7 +300,13 @@ room_select = {
         for i,v in ipairs(local_path_tab) do
             if string.find(v,".ogg") or string.find(v,".mp3") or string.find(v,".wav") then --音频文件
                 --先确定文件夹是否存在 存在就更改后缀
-                local lastSlashIndex = string.find(path, "\\[^\\]*$") --找到最后一个斜杠的位置
+                local lastSlashIndex = string.find(flie_name, "/[^/]*$") --找到最后一个斜杠的位置
+                if not lastSlashIndex then
+                    lastSlashIndex = string.find(flie_name, "\\[^\\]*$") --找到最后一个斜杠的位置
+                end
+                if not lastSlashIndex then
+                    lastSlashIndex = 0
+                end
                 local path_name = string.sub(path, lastSlashIndex + 1)
 
                 if iszip and iszip == 'zip' then
@@ -298,7 +333,13 @@ room_select = {
     filedropped = function(file) -- 文件拖入
         file:open("r")
         local flie_name = file:getFilename()   
-        local lastSlashIndex = string.find(flie_name, "\\[^\\]*$") --找到最后一个斜杠的位置
+        local lastSlashIndex = string.find(flie_name, "/[^/]*$") --找到最后一个斜杠的位置
+        if not lastSlashIndex then
+            lastSlashIndex = string.find(flie_name, "\\[^\\]*$") --找到最后一个斜杠的位置
+        end
+        if not lastSlashIndex then
+            lastSlashIndex = 0 --找到最后一个斜杠的位置
+        end
         local flie_name = string.sub(flie_name, lastSlashIndex + 1)
         if string.find(flie_name,"hit_sound") then
             love.filesystem.newFile(flie_name,"w")
@@ -329,8 +370,7 @@ room_select = {
             end
             love.filesystem.createDirectory("chart/"..path_name ) --创建新的文件夹
             love.filesystem.newFile("chart/"..path_name.."/"..flie_name,"w")
-            love.filesystem.write("chart/"..path_name.."/"..flie_name,
-            file:read()) --复制到新的文件夹
+            love.filesystem.write("chart/"..path_name.."/"..flie_name,file:read()) --复制到新的文件夹
         elseif string.find(flie_name,".zip") then
             room_select.directorydropped(file:getFilename(),'zip') --当文件读
         end

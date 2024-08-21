@@ -26,7 +26,7 @@ objact_delete_chart = { --删除谱面用的
             --找到谱面文件夹然后删除
             local yes_func = function()
 
-                log(#chart_info.chart_name)
+
                 love.filesystem.remove( chart_info.chart_name[select_chart_pos].path )
                 
                 room_select.load()
