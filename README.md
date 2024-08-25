@@ -42,7 +42,7 @@
        按下a＋v并且框选内容在演示区域 粘贴note和粘贴框选的事件  
        按下a＋b并且框选内容在演示区域 粘贴note和反向粘贴框选的事件  
        按下z    撤回上一步对note的操作
-       按下y    重做上一步对note的操作 
+       按下y    重做上一步对note的操作  
   ##**相关**  
   [LxgwNeoXiHei](https://github.com/lxgw/LxgwNeoXiHei)  
   [love2d](https://github.com/love2d/love) 
