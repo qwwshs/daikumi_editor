@@ -9,26 +9,35 @@ end
 function event_get(track,beat) --得到event此时的宽和高
     local now_w = 0
     local now_x = 0
-    for i = 1, #chart.event do
+    local now_x_ed = false --已经计算
+    local now_w_ed = false --已经计算
+    for i =  #chart.event,1,-1 do --倒着减小计算量
+        if now_w_ed and now_x_ed then --计算完成
+            break
+        end
         if chart.event[i].track == track then
             if thebeat(chart.event[i].beat) <= beat and thebeat(chart.event[i].beat2) > beat then
-                if chart.event[i].type == "x" then
+                if chart.event[i].type == "x" and (not now_x_ed) then
                     now_x = bezier(thebeat(chart.event[i].beat),thebeat(chart.event[i].beat2),chart.event[i].form,chart.event[i].to,chart.event[i].trans,beat)
-                else
+                    now_x_ed = true
+                elseif chart.event[i].type == "w" and (not now_w_ed) then
                     now_w = bezier(thebeat(chart.event[i].beat),thebeat(chart.event[i].beat2),chart.event[i].form,chart.event[i].to,chart.event[i].trans,beat)
+                    now_w_ed = true
                 end
+                
             elseif thebeat(chart.event[i].beat2) <= beat then
-                if chart.event[i].type == "x" then
+                if chart.event[i].type == "x" and (not now_x_ed) then
                     now_x = chart.event[i].to
-                else
+                    now_x_ed = true
+                elseif chart.event[i].type == "w" and (not now_w_ed) then
                     now_w = chart.event[i].to
+                    now_w_ed = true
                 end
             end
         end
     end
     return now_x,now_w
 end
-
 -- event函数
 function event_click(type,pos)  --被点击
     input_box_delete_all()

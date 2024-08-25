@@ -7,7 +7,7 @@ select_music_pos = 1 --选择的歌曲
 select_chart_pos = 1 --选择的谱面
 chart_info = {song_name = nil,bg = nil,chart_name = {},song = nil} --谱面的信息
 local ui_edit = love.graphics.newImage("asset/ui_edit.png")
-
+animation_new("select_music_pos_x",1080,1080,0,0,{1,1,1,1})
 room_select = {
     load = function()
         local dir = love.filesystem.getIdentity() --文件的写入目录
@@ -79,11 +79,11 @@ room_select = {
                 love.audio.stop( ) --停止上一个歌曲
             end
         end
-            objact_edit_chart.load(300,0,0,100,50)
-            objact_delete_chart.load(300,100,0,100,50)
-            objact_open_chart_list.load(400,200,0,100,50)
-            objact_select_file.load(400,300,0,100,50)
-            objact_selector.load(500,0,0,1100,800)
+            objact_edit_chart.load(0,750,0,100,50)
+            objact_delete_chart.load(100,750,0,100,50)
+            objact_open_chart_list.load(1500,0,0,100,50)
+            objact_select_file.load(1400,0,0,100,50)
+            objact_selector.load(500,50,0,1100,800)
     end,
     draw = function()
         if not the_room_pos(pos) then
@@ -92,19 +92,21 @@ room_select = {
         love.graphics.setFont(font_plus)
         love.graphics.setColor(0.6,0.6,0.6,0.3)
         love.graphics.rectangle("fill",0,0,1600,800) --背景板
-        love.graphics.print(objact_language.get_string_in_languages('You can drag the chart or folder containing the chart or song to the window for import.'),0,770)
+        love.graphics.print(
+        objact_language.get_string_in_languages('You can drag the chart or folder containing the chart or song to the window for import.')
+        ,0,720)
 
-        --输出所有谱面
+        --输出所有歌曲
         
         local the_music_pos = 1 --用来当做i的
         for i,v in ipairs(chart_tab) do
             if the_music_pos == select_music_pos then
                 love.graphics.setColor(1,1,1,1)
-                love.graphics.print(v,1120 ,20+ (the_music_pos +music_pos)*100)
+                love.graphics.print(v,animation.select_music_pos_x + 20 ,20+ (the_music_pos +music_pos)*100)
                 love.graphics.setColor(0,0,0,0.5)
-                love.graphics.rectangle("fill",1100,(the_music_pos +music_pos)*100,500,100)
+                love.graphics.rectangle("fill",animation.select_music_pos_x,(the_music_pos +music_pos)*100,600,100)
                 love.graphics.setColor(1,1,1,1)
-                love.graphics.rectangle("line",1100,(the_music_pos +music_pos)*100,500,100)
+                love.graphics.rectangle("line",animation.select_music_pos_x,(the_music_pos +music_pos)*100,600,100)
             else
                 love.graphics.setColor(1,1,1,1)
                 love.graphics.print(v,1220 ,20+ (the_music_pos +music_pos)*100)
@@ -119,9 +121,9 @@ room_select = {
 
         --选择到的歌曲
         love.graphics.setColor(0,1,1,0.7)
-        love.graphics.rectangle("fill",1080 ,(select_music_pos +music_pos)*100,10,100) 
+        love.graphics.rectangle("fill",animation.select_music_pos_x - 20 ,(select_music_pos +music_pos)*100,10,100) 
         love.graphics.setColor(1,1,1,1)
-        love.graphics.rectangle("line",1080 ,(select_music_pos +music_pos)*100,10,100)
+        love.graphics.rectangle("line",animation.select_music_pos_x - 20,(select_music_pos +music_pos)*100,10,100)
 
         
         love.graphics.setColor(1,1,1,1)
@@ -141,19 +143,19 @@ room_select = {
 
         love.graphics.setFont(font_plus)
         if type(chart_info.song_name) == "string" then --曲名
-            love.graphics.print("music: "..chart_info.song_name,100,300)
+            love.graphics.print("music: "..chart_info.song_name,0,300)
         end
 
         
         --选择到的谱面
         if #chart_info.chart_name > 0 then
             love.graphics.setColor(1,1,1,0.3)
-            love.graphics.rectangle("fill",100 ,330+ (select_chart_pos +chart_pos)*30,300,30) 
+            love.graphics.rectangle("fill",300 ,330+ (select_chart_pos +chart_pos)*30,300,30) 
         end
 
         love.graphics.setFont(font)
         for i = 1,#chart_info.chart_name do --谱面名
-            love.graphics.print("chart"..i..": "..chart_info.chart_name[i].name,100,330 + (i+chart_pos) *30)
+            love.graphics.print("chart"..i..": "..chart_info.chart_name[i].name,300,330 + (i+chart_pos) *30)
         end
 
 
@@ -164,7 +166,7 @@ room_select = {
         objact_selector.draw()
 
         love.graphics.setFont(font)
-
+        love.graphics.setColor(1,1,1,1)
 
     end,
     keypressed = function(key)
@@ -191,12 +193,24 @@ room_select = {
             else
                 music_pos = music_pos - 1
             end
-        elseif mouse.x > 0 and mouse.x < 800 then
+        elseif mouse.x > 300 and mouse.x < 600 then
             if y > 0 then
                 chart_pos = chart_pos + 1
             else
                 chart_pos = chart_pos - 1
             end
+        end
+        while 330+ (#chart_info.chart_name +chart_pos)*30 < 0 do
+            chart_pos = chart_pos + 1
+        end
+        while 330+ (1 +chart_pos)*30 > 800 do
+            chart_pos = chart_pos - 1
+        end
+        while 20+ (#chart_tab +music_pos)*100 < 0 do
+            music_pos = music_pos + 1
+        end
+        while 20+ (1 +music_pos)*100 > 800 do
+            music_pos = music_pos - 1
         end
     end,
     mousepressed = function( x, y, button, istouch, presses )
@@ -207,8 +221,9 @@ room_select = {
         if selector_file_open == true then
             return
         end
+
         --点击选择谱面
-        if x > 800 and x < 1600 then
+        if x > 1000 and x < 1600 and y > 50 and y < 750 then
             select_music_pos = math.floor(y/100) - music_pos
             if select_music_pos < 1 then
                 select_music_pos = 1
@@ -228,6 +243,7 @@ room_select = {
                     local info = love.filesystem.read("chart/"..chart_tab[select_music_pos].."/"..v)
                     pcall(function() info = loadstring("return "..info)() end)
                     if type(info) ~= "table" then
+                        log("It is "..type(info))
                         info = {}
                     end
                     setmetatable(info,meta_chart) --防谱报废
@@ -269,7 +285,9 @@ room_select = {
                 love.audio.stop( ) --停止上一个歌曲
             end
 
-        elseif x >= 0 and x <= 800 then --选择谱面
+            animation_new("select_music_pos_x",1200,1080,0,0.6,{0.7,0.7,1,1})
+
+        elseif x >= 300 and x <= 600 then --选择谱面
             select_chart_pos = math.floor((y -330)/30) - chart_pos
             if select_chart_pos < 1 then
                 select_chart_pos = 1
@@ -293,16 +311,25 @@ room_select = {
             return
         end
     end,
+    update = function(dt)
+        if not the_room_pos(pos) then
+            return
+        end
+        objact_selector.update(dt)
+        if selector_file_open == true then
+            return
+        end
 
+    end,
     directorydropped = function(path ,iszip)
         love.filesystem.mount( path, "local_path",true)
         local local_path_tab = love.filesystem.getDirectoryItems("local_path" ) --得到文件夹下的所有内容
         for i,v in ipairs(local_path_tab) do
             if string.find(v,".ogg") or string.find(v,".mp3") or string.find(v,".wav") then --音频文件
                 --先确定文件夹是否存在 存在就更改后缀
-                local lastSlashIndex = string.find(flie_name, "/[^/]*$") --找到最后一个斜杠的位置
+                local lastSlashIndex = string.find(path, "/[^/]*$") --找到最后一个斜杠的位置
                 if not lastSlashIndex then
-                    lastSlashIndex = string.find(flie_name, "\\[^\\]*$") --找到最后一个斜杠的位置
+                    lastSlashIndex = string.find(path, "\\[^\\]*$") --找到最后一个斜杠的位置
                 end
                 if not lastSlashIndex then
                     lastSlashIndex = 0

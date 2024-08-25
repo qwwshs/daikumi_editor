@@ -30,16 +30,16 @@ objact_hit = {
             end
             if thebeat(chart.note[i].beat) < beat.nowbeat and --播放
             hit_sound_tab["b"..thebeat(chart.note[i].beat).."tk"..chart.note[i].track.."ty"..chart.note[i].type] == true then
-
+                local x,w = event_get(chart.note[i].track,beat.nowbeat)
                 hit_sound_tab["b"..thebeat(chart.note[i].beat).."tk"..chart.note[i].track.."ty"..chart.note[i].type] = false --播放完成
 
-                if hit_sound and settings.hit_sound == 1 and music_play == true then --播放
+                if hit_sound and settings.hit_sound == 1 and music_play == true and w > 0 then --播放
                     love.audio.setVolume( settings.hit_volume / 100 ) --设置音量大小
                     hit_sound:seek(0)
                     hit_sound:play()
                 end
-                if settings.hit == 1 and music_play == true then
-                    local x,w = event_get(chart.note[i].track,beat.nowbeat)
+                if settings.hit == 1 and music_play == true and w > 0 then
+                    
                     hit_tab[#hit_tab + 1] = {x = x * 9,time = time.nowtime}
                 end
             end

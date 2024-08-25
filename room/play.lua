@@ -26,6 +26,7 @@ update = function(dt)
     objact_music_play.update(dt)
     objact_slider.update(dt)
     objact_hit.update(dt)
+    objact_save.update(dt)
 end,
 
 draw = function()
@@ -48,14 +49,22 @@ draw = function()
     love.graphics.setColor(RGBA_hexToRGBA("#64000000")) --游玩区域显示的背景板
     love.graphics.rectangle("fill",0,0,900,800)
 
+    love.graphics.setColor(0,0,0,1) --游玩区域显示的背景板2底板
+    love.graphics.rectangle("fill",0,settings.judge_line_y,900,800 - settings.judge_line_y)
+
     local drawed_track = {} --已经绘制的track
     for i=1 ,#chart.event do --轨道底板绘制
+        if thebeat(chart.event.beat) > beat.nowbeat then
+            break
+        end
         if drawed_track[chart.event[i].track] == nil then
             local x,w = event_get(chart.event[i].track,beat.nowbeat)
             x,w =  (x-w/2) *9,w*9 --为了居中
             --倾斜计算
-            love.graphics.setColor(0,0,0,0.5 )  --底板
-            love.graphics.polygon("fill",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
+            if w ~= 0 then
+                love.graphics.setColor(0,0,0,0.5 )  --底板
+                love.graphics.polygon("fill",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
+            end
             drawed_track[chart.event[i].track] = true
         end
     end
@@ -72,9 +81,10 @@ draw = function()
                 love.graphics.setColor(1,1,1,0.2) 
                 love.graphics.polygon("fill",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
             end
-        
-            love.graphics.setColor(1,1,1,1) --侧线
-            love.graphics.polygon("line",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
+            if w ~= 0 then
+                love.graphics.setColor(1,1,1,1) --侧线
+                love.graphics.polygon("line",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
+            end
             love.graphics.setColor(1,1,1,1) --轨道编号
             if demo_mode == false then
                 if track.track == chart.event[i].track then
@@ -99,19 +109,19 @@ draw = function()
         end
         local original_x = x*9 --原始x没有因为居中修改坐标
         x,w =  (x-w/2) *9,w*9 --为了居中
-        local to_3d = (y - note_occurrence_point * math.tan(math.rad(settings.angle))) / 
-        (settings.judge_line_y - note_occurrence_point * math.tan(math.rad(settings.angle))) --变成伪3d y 比上长度
-        local to_3d_w =  w *to_3d
         
-        local to_3d_x = (original_x-450) *to_3d - to_3d_w/2
+        if not  (y2 > 800 + note_h or y < 0 -  note_h) then
+            local to_3d = (y - note_occurrence_point * math.tan(math.rad(settings.angle))) / 
+                (settings.judge_line_y - note_occurrence_point * math.tan(math.rad(settings.angle))) --变成伪3d y 比上长度
+            local to_3d_w =  w *to_3d
+        
+            local to_3d_x = (original_x-450) *to_3d - to_3d_w/2
 
             --图像范围限制函数
-        local function myStencilFunction()
-            love.graphics.polygon("fill",x-450,settings.judge_line_y-y,x-450+w,settings.judge_line_y-y,0,note_occurrence_point*math.tan(math.rad(settings.angle))-y)
-            --love.graphics.rectangle("fill",-1000,-1000,2000,2000)
-        end
+            local function myStencilFunction()
+                love.graphics.polygon("fill",x-450,settings.judge_line_y-y,x-450+w,settings.judge_line_y-y,0,note_occurrence_point*math.tan(math.rad(settings.angle))-y)
+            end
 
-        if not  (y2 > 800 + note_h or y < 0 -  note_h) then
             --使图片倾斜
             local note_angle = math.acos( (x-450) / (settings.judge_line_y-note_occurrence_point *math.tan(math.rad(settings.angle)) ))
             love.graphics.push()
@@ -200,6 +210,8 @@ draw = function()
             
             end
             love.graphics.setStencilTest()
+        elseif y < 0 - note_h then
+            break --因为note按顺序排的 所以不用再算一遍
         end
     end
     love.graphics.setColor(0,0,0,1) --判定线 play
@@ -298,6 +310,8 @@ draw = function()
                 -- 绘制线段  
                 love.graphics.rectangle("fill",900 - math.abs(sampleValue) * 300, beat_to_y(time_to_beat(chart.bpm_list,i - chart.offset / 1000)), 
                 math.abs(sampleValue) * 300,2) -- 音频振幅  
+            elseif beat_to_y(time_to_beat(chart.bpm_list,i  - chart.offset / 1000)) < 0 then
+                break
             end
         end
     end
@@ -332,6 +346,8 @@ draw = function()
                     love.graphics.draw(ui_hold_body,900,y2+note_h,0,_scale_w,_scale_h2) --身
 
                 end
+            elseif y < -note_h then
+                break
             end
         end
         
@@ -343,7 +359,7 @@ draw = function()
         local _scale_w = 1 / _width * note_w
         local _scale_h = 1 / _height * note_h
         love.graphics.setColor(1,1,1,1)
-        local y = settings.judge_line_y + (beat.nowbeat - thebeat(thelocal_hold.beat)) * denom.scale * 100
+        local y = beat_to_y(thelocal_hold.beat)
         if y > 0 - note_h and y < 800 + note_h then
             love.graphics.draw(ui_hold,900,y-note_h,0,_scale_w,_scale_h) -- 头
         end
@@ -381,6 +397,8 @@ draw = function()
                         local nowy = y + (y2 - y) * k / 10
                         love.graphics.rectangle("fill",nowx,nowy -  (y2 - y)/10,5, (y2 - y)/10) --减去一个 (y2 - y)/10是为了与头对齐
                     end
+                elseif  y < -note_h then
+                    break
                 end
             end
         end

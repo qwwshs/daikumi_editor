@@ -6,6 +6,7 @@ local h = 0
 local r = 0
 local ui_save = love.graphics.newImage("asset/ui_save.png")
 local quit_click = 0 --点击次数
+local save_time = 0 --保存时间
 objact_save = { --分度改变用的
     load = function(x1,y1,r1,w1,h1)
         x= x1 --初始化
@@ -32,6 +33,13 @@ objact_save = { --分度改变用的
         if x1 >= x  and x1 <= x + w and y1 <= y + h and y1 >= y then -- 在play的范围内
             save(chart,"chart.txt")
             objact_message_box.message("save")
+        end
+    end,
+    update = function(dt)
+        if elapsed_time - save_time >= 114 and demo_mode == false then --保存
+            save_time = elapsed_time
+            save(chart,"chart.txt")
+            objact_message_box.message("auto_save")
         end
     end,
     quit = function()

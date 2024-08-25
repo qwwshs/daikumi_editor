@@ -1,60 +1,4 @@
-utf8 = require("utf8")
-socket = require("socket") --网络通信
-require("function/beat_and_time")
-require("function/log")
-require("function/string")
-require("function/table")
-require("function/save")
-require("function/RGB")
-nativefs = require("function/nativefs")
-dkjson = require("function/dkjson")
-require("function/mc_to_dakumi")
-require("function/input_box")
-require("function/button")
-require("function/bezier")
-require("function/math")
-require("function/switch")
-require("function/note")
-require("function/event")
-require("room/select")
-require("room/play")
-require("room/sidebar")
-require("objact/button_denom")
-require("objact/button_music_speed")
-require('objact/button_track_scale')
-require('objact/button_save')
-require("objact/mouse")
-require("objact/music_play")
-require('objact/message_box')
-require("objact/note")
-require("objact/note_edit_inplay")
-require("objact/event")
-require("objact/hit")
-require('objact/event_edit')
-require('objact/event_edit_bezier')
-require('objact/button_track')
-require('objact/button_chart_info')
-require('objact/button_event_edit_default_bezier')
-require('objact/button_delete_chart')
-require('objact/button_open_chart_list')
-require('objact/button_edit_chart')
-require('objact/button_break')
-require('objact/button_settings')
-require('objact/button_to_github')
-require('objact/button_select_file')
-require('objact/chart_info')
-require('objact/bpm_list')
-require('objact/slider')
-require('objact/copy')
-require('objact/redo')
-require('objact/settings')
-require('objact/demo_mode')
-require('objact/language')
-require('objact/file_selector')
-require('objact/selector_break')
-require('objact/selector_close')
-require('objact/selector_refresh')
-version = "0.1.2"
+version = "0.1.3"
 beat = {nowbeat = 0,allbeat = 100}
 time = {nowtime = 0 ,alltime = 100}
 denom = {scale = 1,denom = 4} --分度的缩放和使用的分度
@@ -112,9 +56,11 @@ meta_settings = { --设置基本格式 元表
         note_alpha = 100,
         note_height = 75,
         bg_alpha = 50,
+        auto_save = 1, --自动保存
     }
 }
 
+require('the_require')
 
 function the_room_pos(pos) -- 房间状态判定
     return pos == room_pos
@@ -215,8 +161,11 @@ function love.update(dt)
     mouse.x = mouse.original_x / window_w_scale
     mouse.y = mouse.original_y / window_h_scale
     elapsed_time = elapsed_time + dt
+    animation_update(dt)
+    
     room_play.update(dt)
     room_sidebar.update(dt)
+    room_select.update(dt)
     objact_message_box.update(dt)
 end
 function love.draw()

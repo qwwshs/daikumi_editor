@@ -32,6 +32,7 @@ objact_settings = {
             note_alpha =  "input_box",
             note_height =  "input_box",
             bg_alpha =  "input_box",
+            auto_save =  "switch1",
         }
         if not room_type(type) then
             return

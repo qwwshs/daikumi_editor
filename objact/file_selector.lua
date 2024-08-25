@@ -17,6 +17,8 @@ objact_selector = {
     open = function()
         selector_file_open = true
         objact_selector.load_path()
+        animation_new("file_selector_w",0,w,0,0.3,{0,0,1,1})
+        animation_new("file_selector_h",0,h,0,0.3,{0,0,1,1})
     end,
     load_path = function() --对路径初始化
         selector_now_path = "C:/"
@@ -40,12 +42,14 @@ objact_selector = {
         objact_selector_break.load(x+10,y+30,0,20,20)
         objact_selector_close.load(x+w-30,y+5,0,20,20)
         objact_selector_refresh.load(x+50,y+100,0,20,20)
+        animation_new("file_selector_w",w,w,0,0.3,{0,0,1,1})
+        animation_new("file_selector_h",h,h,0,0.3,{0,0,1,1})
     end,
     draw = function()
         if selector_file_open == false then
             return
         end
-        love.graphics.setColor(1,1,1,1)
+        love.graphics.setColor(1,1,1,1) --背景板
         love.graphics.rectangle("line",x,y,w,h)
         love.graphics.setColor(0,0,0,0.7)
         love.graphics.rectangle("fill",x,y,w,h)
@@ -200,4 +204,8 @@ objact_selector = {
             objact_selector.anew_find()
         end
     end,
+    update = function(dt)
+        w = animation.file_selector_w
+        h = animation.file_selector_h
+    end
 }

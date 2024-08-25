@@ -255,21 +255,35 @@ objact_copy = {
             displayed_content = "nil"
             --先对表进行处理
             local copy_tab2 = copyTable(copy_tab)
+            local frist_beat = {0,0,4}  --作为基准
+            if copy_tab.note[1] and copy_tab.event[1] and thebeat(copy_tab.note[1].beat) <= thebeat(copy_tab.event[1].beat) then
+                frist_beat = copy_tab.note[1].beat
+            elseif copy_tab.note[1] and copy_tab.event[1] and thebeat(copy_tab.note[1].beat) > thebeat(copy_tab.event[1].beat) then
+                frist_beat = copy_tab.event[1].beat
+            elseif (not copy_tab.note[1]) and copy_tab.event[1] then
+                frist_beat = copy_tab.event[1].beat
+            elseif copy_tab.note[1] and (not copy_tab.event[1]) then
+                frist_beat = copy_tab.note[1].beat
+            end
+
+            if copy_tab.note[1] and copy_tab.pos == 'play' and iskeyboard.a == false then --不完全复制
+                frist_beat = copy_tab.note[1].beat
+            end
             for i = 1, #copy_tab2.note do
                 if copy_tab.pos ~= 'play' then
                     copy_tab2.note[i].track = track.track
                 end
-                copy_tab2.note[i].beat = beat_add(beat_sub(copy_tab2.note[i].beat,copy_tab.note[1].beat),y_to_beat(mouse.y))
+                copy_tab2.note[i].beat = beat_add(beat_sub(copy_tab2.note[i].beat,frist_beat),y_to_beat(mouse.y))
                 if copy_tab2.note[i].type == "hold" then
-                    copy_tab2.note[i].beat2 = beat_add(beat_sub(copy_tab2.note[i].beat2,copy_tab.note[1].beat),y_to_beat(mouse.y))
+                    copy_tab2.note[i].beat2 = beat_add(beat_sub(copy_tab2.note[i].beat2,frist_beat),y_to_beat(mouse.y))
                 end
             end
             for i = 1, #copy_tab2.event do
                 if copy_tab.pos ~= 'play' then
                     copy_tab2.event[i].track = track.track
                 end
-                copy_tab2.event[i].beat = beat_add(beat_sub(copy_tab2.event[i].beat,copy_tab.event[1].beat),y_to_beat(mouse.y))
-                copy_tab2.event[i].beat2 = beat_add(beat_sub(copy_tab2.event[i].beat2,copy_tab.event[1].beat),y_to_beat(mouse.y))
+                copy_tab2.event[i].beat = beat_add(beat_sub(copy_tab2.event[i].beat,frist_beat),y_to_beat(mouse.y))
+                copy_tab2.event[i].beat2 = beat_add(beat_sub(copy_tab2.event[i].beat2,frist_beat),y_to_beat(mouse.y))
                 if key == "b" then --取反
                     copy_tab2.event[i].form = 100 - copy_tab2.event[i].form
                     copy_tab2.event[i].to = 100 - copy_tab2.event[i].to

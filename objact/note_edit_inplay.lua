@@ -38,9 +38,10 @@ objact_note_edit_inplay = {
         end
     end,
     mousepressed = function(x,y)
-        if x > 900 and y > 100 then 
+        if x > 900 or y < 100 then 
             return
         end
+
         local local_track = {}
         for i = 1,#chart.event do --点击轨道进入轨道的编辑事件
             local track_x,track_w = event_get(chart.event[i].track,beat.nowbeat)

@@ -7,6 +7,8 @@
 {'hit_volume','打击音量'},
 {'hit_sound','打击音'},
 {'hit','打击'},
+{"auto_save",'自动保存'},
+{"bg_alpha",'背景透明度'},
 {'vsync','垂直同步'},
 {'language','语言'},
 {'contact_roller','鼠标滚动系数'},

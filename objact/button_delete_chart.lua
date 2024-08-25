@@ -27,7 +27,7 @@ objact_delete_chart = { --删除谱面用的
             local yes_func = function()
 
 
-                love.filesystem.remove( chart_info.chart_name[select_chart_pos].path )
+                pcall(function() love.filesystem.remove( chart_info.chart_name[select_chart_pos].path ) end)
                 
                 room_select.load()
             end
