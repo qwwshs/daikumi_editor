@@ -49,4 +49,5 @@
 {"delete?",'删除？'},
 {"file selector",'文件选择器'},
 {"break",'返回'},
+{'export','导出'},
 }

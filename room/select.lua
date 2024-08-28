@@ -1,6 +1,6 @@
 --选择的歌曲的房间
 local pos = "select"
-local chart_tab = {} --所有谱面的文件夹
+chart_tab = {} --所有谱面的文件夹
 local music_pos = 0 --移动显示的位置
 local chart_pos = 0 --移动显示的位置
 select_music_pos = 1 --选择的歌曲
@@ -10,6 +10,10 @@ local ui_edit = love.graphics.newImage("asset/ui_edit.png")
 animation_new("select_music_pos_x",1080,1080,0,0,{1,1,1,1})
 room_select = {
     load = function()
+        chart_tab = {} --所有谱面的文件夹
+        chart_info = {song_name = nil,bg = nil,chart_name = {},song = nil} --谱面的信息
+        love.audio.stop( ) --停止上一个歌曲
+
         local dir = love.filesystem.getIdentity() --文件的写入目录
         local is_chart,is_chart_type = love.filesystem.getInfo( "chart" ) --得到chart文件夹是否存在
         if not (is_chart) or is_chart_type ~= 'directory' then
@@ -21,7 +25,7 @@ room_select = {
         if not (is_temporary) or is_temporary_type ~= 'directory' then
             love.filesystem.createDirectory("temporary" )
         end
-        local temporary_tab = love.filesystem.getDirectoryItems("temporary" ) --得到文件夹下的所有谱面
+        local temporary_tab = love.filesystem.getDirectoryItems("temporary" ) --得到文件夹下的所有文件
         for i ,v in ipairs(temporary_tab) do
             love.filesystem.remove("temporary".."/"..v)
         end
@@ -81,8 +85,11 @@ room_select = {
         end
             objact_edit_chart.load(0,750,0,100,50)
             objact_delete_chart.load(100,750,0,100,50)
+            objact_new_chart.load(200,750,0,100,50)
             objact_open_chart_list.load(1500,0,0,100,50)
             objact_select_file.load(1400,0,0,100,50)
+            objact_delete_music.load(1300,0,0,100,50)
+            objact_export.load(1200,0,0,100,50)
             objact_selector.load(500,50,0,1100,800)
     end,
     draw = function()
@@ -160,7 +167,10 @@ room_select = {
 
 
         objact_delete_chart.draw()
+        objact_new_chart.draw()
         objact_edit_chart.draw()
+        objact_export.draw()
+        objact_delete_music.draw()
         objact_open_chart_list.draw()
         objact_select_file.draw()
         objact_selector.draw()
@@ -297,10 +307,13 @@ room_select = {
             end
 
         end
-            
+        objact_delete_music.mousepressed(x,y,button,istouch,presses)
         objact_delete_chart.mousepressed(x,y,button,istouch,presses)
         objact_edit_chart.mousepressed(x,y,button,istouch,presses)
+        objact_new_chart.mousepressed(x,y,button,istouch,presses)
+        
         objact_open_chart_list.mousepressed(x,y,button,istouch,presses)
+        objact_export.mousepressed(x,y,button,istouch,presses)
         objact_select_file.mousepressed(x,y,button,istouch,presses)
 
 

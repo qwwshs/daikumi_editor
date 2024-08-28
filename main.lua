@@ -1,4 +1,5 @@
-version = "0.1.3"
+version = "0.1.5"
+
 beat = {nowbeat = 0,allbeat = 100}
 time = {nowtime = 0 ,alltime = 100}
 denom = {scale = 1,denom = 4} --分度的缩放和使用的分度

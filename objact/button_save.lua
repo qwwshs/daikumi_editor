@@ -36,7 +36,7 @@ objact_save = { --分度改变用的
         end
     end,
     update = function(dt)
-        if elapsed_time - save_time >= 114 and demo_mode == false then --保存
+        if elapsed_time - save_time >= 114 and demo_mode == false and settings.auto_save == 1 then --保存
             save_time = elapsed_time
             save(chart,"chart.txt")
             objact_message_box.message("auto_save")
