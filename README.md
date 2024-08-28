@@ -47,5 +47,6 @@
   [LxgwNeoXiHei](https://github.com/lxgw/LxgwNeoXiHei)  
   [love2d](https://github.com/love2d/love) 
   [dkjson](https://github.com/LuaDist/dkjson)  
-  [nativefs](https://github.com/zorggn/nativefs)
+  [nativefs](https://github.com/zorggn/nativefs)  
+  [7zip](https://github.com/ip7z/7zip)
   
