@@ -44,13 +44,15 @@ objact_note_edit_inplay = {
 
         local local_track = {}
         for i = 1,#chart.event do --点击轨道进入轨道的编辑事件
-            local track_x,track_w = event_get(chart.event[i].track,beat.nowbeat)
-            track_x,track_w = (track_x-track_w/2)*9,track_w*9
-            if x >= track_x and x <= track_w + track_x then
-                
-                if not table_contains(local_track,chart.event[i].track) then
+            if not table_contains(local_track,chart.event[i].track) then --不存在 记录
+                local track_x,track_w = event_get(chart.event[i].track,beat.nowbeat)
+                track_x,track_w = (track_x-track_w/2)*9,track_w*9
+                if x >= track_x and x <= track_w + track_x then
                     local_track[#local_track + 1] = chart.event[i].track
                 end
+            end
+            if thebeat(chart.event[i].beat) > beat.nowbeat then
+                break
             end
         end
         for i = 1, #local_track do

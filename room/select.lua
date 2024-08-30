@@ -233,7 +233,7 @@ room_select = {
         end
 
         --点击选择谱面
-        if x > 1000 and x < 1600 and y > 50 and y < 750 then
+        if x > 1000 and x < 1600 and y > 50 and y < 750 and select_music_pos ~= math.floor(y/100) - music_pos then
             select_music_pos = math.floor(y/100) - music_pos
             if select_music_pos < 1 then
                 select_music_pos = 1
@@ -245,6 +245,9 @@ room_select = {
             chart_info =  {song_name = nil,bg = nil,chart_name = {},song = nil}
             local file_tab = love.filesystem.getDirectoryItems("chart/"..chart_tab[select_music_pos]) --得到谱面文件夹下的所有谱面
             chart = {} --重置
+            bg = nil
+            music = nil
+            music_data = {count = 0,soundData = nil}
             setmetatable(chart,meta_chart) --防谱报废
 
             fillMissingElements(chart,meta_chart.__index)

@@ -137,6 +137,9 @@ objact_copy = {
                 if not (max_x < track_x or track_x + track_w < min_x) then
                     local_track[i] = true
                 end
+                if thebeat(chart.event[i].beat) > max_y_beat then
+                    break
+                end
             end
 
             for i = 1,#chart.note do
@@ -150,6 +153,9 @@ objact_copy = {
                     copy_tab.note[#copy_tab.note + 1] = copyTable(chart.note[i])
 
                 end
+                if isbeat > max_y_beat then
+                    break
+                end
             end
 
             for i = 1,#chart.event do --用于完全复制
@@ -157,6 +163,9 @@ objact_copy = {
                 local isbeat2 = thebeat(chart.event[i].beat2)
                 if (not (max_y_beat < isbeat or isbeat2 < min_y_beat)) and local_track[chart.event[i].track] == true then
                     copy_tab.event[#copy_tab.event + 1] = copyTable(chart.event[i])
+                end
+                if thebeat(chart.event[i].beat) > max_y_beat then
+                    break
                 end
             end
 
@@ -174,6 +183,9 @@ objact_copy = {
                 if (not (max_y_beat < isbeat or isbeat2 < min_y_beat)) and track.track == chart.note[i].track then --这引擎y是向下增长的 服了
                     copy_tab.note[#copy_tab.note + 1] = copyTable(chart.note[i])
 
+                end
+                if isbeat > max_y_beat then
+                    break
                 end
             end
 
@@ -193,6 +205,10 @@ objact_copy = {
                     if (not (max_y_beat < isbeat or isbeat2 < min_y_beat)) and track.track == chart.event[i].track then
                         copy_tab.event[#copy_tab.event + 1] = copyTable(chart.event[i])
                     end
+                    
+                end
+                if thebeat(chart.event[i].beat) > max_y_beat then
+                    break
                 end
             end
         end

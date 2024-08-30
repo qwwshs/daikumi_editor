@@ -1,4 +1,4 @@
-version = "0.1.5"
+version = "0.1.6"
 
 beat = {nowbeat = 0,allbeat = 100}
 time = {nowtime = 0 ,alltime = 100}
@@ -10,7 +10,6 @@ bg = nil
 music = nil
 music_data = {count = 0,soundData = nil} --音频可视化用的
 room_pos = "select" --所属房间
-
 music_play = false
 mouse  = {x = 0,y = 0,original_x = 0,original_y = 0, down_state = false}--鼠标按下状态
 elapsed_time = 0 -- 已运行时间

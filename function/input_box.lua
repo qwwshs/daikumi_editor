@@ -186,7 +186,9 @@ function input_box_delete_choose() --初始化选择状态
     end
 end
 function input_box_textinput(input) --输入文字
+    if input:find([[\]]) then
+        return
+    end
     input_string = string.sub(input_string,1,input_string_index)..input..string.sub(input_string,input_string_index+1,#input_string)
     input_string_index = input_string_index + #input
-    log(string.format("%08X", utf8.codepoint(input)))
 end
