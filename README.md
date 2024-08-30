@@ -5,6 +5,10 @@
     love2d相关信息请阅览[love](https://love2d.org/)  
 ##**注意事项**  
     - 在使用前请切换英文输入法  
+    offset的单位为ms  
+    bpm的beat分为三个数值 第一个是beat的整数数值 第二个是分数的分母 第三个是分数的分子  
+    x w的范围为0-100  
+    谱面会保存到love2d的文件夹内 点击按钮open_chart_list能打开
 ##**一些没那么容易发现的基础操作**   
   类型  操作 操作所对应的结果  
   note  
@@ -45,7 +49,7 @@
        按下y    重做上一步对note的操作  
   ##**相关**  
   [LxgwNeoXiHei](https://github.com/lxgw/LxgwNeoXiHei)  
-  [love2d](https://github.com/love2d/love) 
+  [love2d](https://github.com/love2d/love)  
   [dkjson](https://github.com/LuaDist/dkjson)  
   [nativefs](https://github.com/zorggn/nativefs)  
   [7zip](https://github.com/ip7z/7zip)
