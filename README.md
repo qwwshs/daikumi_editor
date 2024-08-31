@@ -3,6 +3,8 @@
 ##**文件创建与应用程序打开**  
     将dakumi_editor打开然后导入带有谱面的zip或是一个音频文件
     love2d相关信息请阅览[love](https://love2d.org/)  
+
+  在下面的操作中 w = width x = x-postion  
 ##**注意事项**  
     - 在使用前请切换英文输入法  
     offset的单位为ms  
