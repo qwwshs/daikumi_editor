@@ -38,11 +38,11 @@ function event_get(track,beat) --得到event此时的宽和高
     end
     return now_x,now_w
 end
+
 -- event函数
 function event_click(type,pos)  --被点击
-    input_box_delete_all()
     displayed_content = "nil" --界面清除
-    --删除检测区间
+    --检测区间
     local pos_interval = 20 * denom.scale
     --根据距离反推出beat
     local event_beat_up = y_to_beat(pos - pos_interval)
@@ -53,15 +53,13 @@ function event_click(type,pos)  --被点击
         (thebeat(chart.event[i].beat) <= event_beat_down and thebeat(chart.event[i].beat2) >= event_beat_down)
         or (thebeat(chart.event[i].beat) <= event_beat_up and thebeat(chart.event[i].beat2) >= event_beat_up)) then
             displayed_content = "event"..i
-            input_box_delete_all()
             objact_event_edit.load(1200,40,0,30,30) --调用编辑界面
             event_clean_up()
-            return
+            return i
         end
     end
 end
 function event_delete(type,pos)
-    input_box_delete_all()
     displayed_content = "nil" --界面清除
     --删除检测区间
     local pos_interval = 20 * denom.scale
@@ -97,7 +95,7 @@ function event_place(type,pos)
                 beat = {math.floor(event_beat),event_min_denom,denom.denom},
                 form = 0,
                 to = 0,
-                trans = {0,0,1,1}
+                trans = {[1] = 0,[2] = 0,[3] = 1,[4] = 1}
             }
             event_type = 1
             local x,w = event_get(local_event.track,thebeat(local_event.beat)) --把数值设定为上次event结尾的数值
@@ -122,29 +120,18 @@ function event_place(type,pos)
         local thetable = {} --临时event表
         local theevent = false --得到event编辑的长条索引
         local int_theevent = 1
-        while #chart.event > 0 do
-            local min = 1 --设1 event大小最小
-            for i = 1 ,#chart.event do
-                if thebeat(chart.event[i].beat) < thebeat(chart.event[min].beat) then
-                    min = i
-                end
-                if tablesEqual(chart.event[i],local_event) then --表相同
-                    theevent = true
-                end
+        local min = #chart.event --设1 event大小最小
+        event_sort()
+        for i = 1 ,#chart.event do
+            if tablesEqual(chart.event[i],local_event) then --表相同
+                theevent = true
+                int_theevent = i
+                break
             end
 
-            thetable[#thetable + 1] = chart.event[min]
-            table.remove(chart.event,min)
-            if theevent == true then
-                int_theevent = #thetable  --得到位置
-                theevent = false
-            end
         end
-
-        chart.event = thetable
         objact_redo.write_revoke("event place",local_event)
         displayed_content = "event"..int_theevent
-        input_box_delete_all()
         objact_event_edit.load(1200,40,0,30,30) --调用编辑界面
         event_clean_up()
     end

@@ -6,6 +6,7 @@ require("function/bezier") --贝塞尔曲线
 require("function/log")
 require("function/string")
 require("function/table")
+require("love.timer")
 -- 获取主线程传递的频道  
 local channel = ...  
 
@@ -40,5 +41,5 @@ while true do
         end
         love.thread.getChannel( 'animation_to_main' ):push(animation)
     end  
-    
+    love.timer.sleep(0.001)  
 end

@@ -1,10 +1,9 @@
-version = "0.1.6"
-
+version = "0.1.9"
 beat = {nowbeat = 0,allbeat = 100}
 time = {nowtime = 0 ,alltime = 100}
 denom = {scale = 1,denom = 4} --分度的缩放和使用的分度
 chart = {}
-track = {track = 1} -- 第一个轨道
+track = {track = 1,fence = 20} -- 第一个轨道
 language = {} --语言表
 bg = nil
 music = nil
@@ -16,6 +15,7 @@ elapsed_time = 0 -- 已运行时间
 font = love.graphics.newFont("LXGWNeoXiHei.ttf", 13) -- 字体 
 font_plus = love.graphics.newFont("LXGWNeoXiHei.ttf", 26) -- 字体 plus
 isctrl  = false --ctrl按下状态
+isalt = false --alt按下状态
 iskeyboard = {} --key的按下状态
 note_occurrence_point = -1000 --note出现点 （斜轨用的）
 music_speed = 1 --播放速度
@@ -56,6 +56,9 @@ meta_settings = { --设置基本格式 元表
         note_alpha = 100,
         note_height = 75,
         bg_alpha = 50,
+        denom_alpha = 70,
+        window_width = 1600,
+        window_height = 800,
         auto_save = 1, --自动保存
     }
 }
@@ -63,7 +66,18 @@ meta_settings = { --设置基本格式 元表
 require('the_require')
 
 function the_room_pos(pos) -- 房间状态判定
-    return pos == room_pos
+    local isroom = false
+    if type(pos) == 'table' then
+        for i, v in ipairs(pos) do
+            if the_room_pos(v) then
+                isroom = true
+            end
+        end
+
+        return isroom
+    else
+        return pos == room_pos
+    end
 end
 
 function love.load()
@@ -107,6 +121,8 @@ function love.load()
     
     fillMissingElements(settings,meta_settings.__index)
     love.window.setVSync( settings.vsync  )
+    love.resize( settings.window_width, settings.window_height )  --缩放窗口
+    love.window.setMode(settings.window_width, settings.window_height, {resizable = true})  
 
     --    local music_esist = false
     --    music_error = ""
@@ -157,6 +173,7 @@ function love.update(dt)
             
         end
     end
+    math.randomseed(elapsed_time) --随机数种子
     mouse.original_x, mouse.original_y = love.mouse.getPosition( ) --对缩放进行处理
     mouse.x = mouse.original_x / window_w_scale
     mouse.y = mouse.original_y / window_h_scale
@@ -175,7 +192,11 @@ function love.draw()
     room_sidebar.draw()
     objact_message_box.draw()
     room_select.draw()
+    input_box_draw_all()
+    switch_draw_all()
+    button_draw_all()
     objact_mouse.draw()
+
 end
 
 function love.keypressed(key)
@@ -184,6 +205,9 @@ function love.keypressed(key)
     end
     if key == "lctrl" or key == "rctrl" then
         isctrl = true
+    end
+    if key == "lalt" or key == "ralt" then
+        isalt = true
     end
     iskeyboard[key] = true
     if string.sub(key,1,2) == "kp" then
@@ -203,6 +227,9 @@ function love.keyreleased(key)
     if key == "lctrl" or key == "rctrl" then
         isctrl = false
     end 
+    if key == "lalt" or key == "ralt" then
+        isalt = false
+    end
     iskeyboard[key] = false
     room_play.keyreleased(key)
 end
@@ -242,6 +269,9 @@ function love.mousereleased( x, y, button, istouch, presses )
     room_sidebar.mousereleased( x, y, button, istouch, presses )
     room_play.mousereleased(x, y, button, istouch, presses)
     room_select.mousereleased( x, y, button, istouch, presses )
+    input_box_mousepressed(x, y)
+    button_mousepressed(x,y)
+    switch_mousepressed(x,y)
 end
 
 function love.textinput(input)

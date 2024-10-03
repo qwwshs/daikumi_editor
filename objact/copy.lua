@@ -1,16 +1,44 @@
 --note和event的复制粘贴
 local mouse_start_pos = {x = 0 ,y = 0 } --鼠标按下的时候的x和y
+local meta_copy_tab = {}
 local copy_tab = {
     note = {},
     event = {},
     type = "", --类型是复制 还是裁剪
     pos = "", --位置是游玩区域还是编辑区域
 }
+function copy_sub(new_table,type)
+    for i, v in ipairs(copy_tab[type]) do
+        if tablesEqual(copy_tab[type][i],new_table) then
+            table.remove(copy_tab[type],i)
+        end
+    end
+end
+function copy_add(new_table,type)
+    for i = 1, #copy_tab[type] do
+        if tablesEqual(copy_tab[type][i],new_table) then --去重
+            return
+        end
+    end
+    copy_tab[type][#copy_tab[type] + 1] = new_table
+end
+function copy_exist(new_table,type)
+    for i = 1, #copy_tab[type] do
+        if tablesEqual(copy_tab[type][i],new_table) then --去重
+            return true
+        end
+    end
+    return false
+end
+function get_copy()
+    return copy_tab
+end
+
 objact_copy = {
     draw = function()
         local note_h = settings.note_height --25 * denom.scale
         local note_w = 75 
-        if mouse.down_state == true then --复制框
+        if love.mouse.isDown(1) then --复制框
             love.graphics.setColor(0,1,1,0.4)
             love.graphics.rectangle("fill",mouse_start_pos.x,mouse_start_pos.y,mouse.x - mouse_start_pos.x,mouse.y - mouse_start_pos.y)
             love.graphics.setColor(0,1,1,1)
@@ -45,11 +73,12 @@ objact_copy = {
                 if copy_tab.note[i].type == "hold" then
                     y2 = beat_to_y(copy_tab.note[i].beat2)
                 end
-                local original_x = x*9 --原始x没有因为居中修改坐标
-                x,w =  (x-w/2) *9,w*9 --为了居中
+                local original_x = to_play_track_original_w(x,w)  --原始x没有因为居中修改坐标
+                x,w =   to_play_track(x,w) --为了居中
+
                 local to_3d = (y - note_occurrence_point * math.tan(math.rad(settings.angle))) / 
                 (settings.judge_line_y - note_occurrence_point * math.tan(math.rad(settings.angle))) --变成伪3d y 比上长度
-                local to_3d_w =  w *to_3d
+                local to_3d_w =  w --没变为3d的必要
                 
                 local to_3d_x = (original_x-450) *to_3d - to_3d_w/2
         
@@ -113,12 +142,42 @@ objact_copy = {
     update = function(dt)
 
     end,
-    mousepressed = function(x,y)
+    mousepressed = function(x,y,button)
+        if love.mouse.isDown(2) then --单选
+            if x > 1000 and x <= 1100 then
+                if copy_exist(chart.event[event_click("x",mouse.y)],"event") then --存在就取消勾选
+                    copy_sub(chart.event[event_click("x",mouse.y)],"event")
+                else
+                    copy_add(chart.event[event_click("x",mouse.y)],"event")
+                end
+            elseif x > 1100 and x <= 1200 then
+                if copy_exist(chart.event[event_click("w",mouse.y)],"event") then --存在就取消勾选
+                    copy_sub(chart.event[event_click("w",mouse.y)],"event")
+                else
+                    copy_add(chart.event[event_click("w",mouse.y)],"event")
+                end
+            elseif x <= 1000 then
+                if copy_exist(chart.note[note_click(mouse.y)],"note") then --存在就取消勾选
+                    copy_sub(chart.note[note_click(mouse.y)],"note")
+                else
+                    copy_add(chart.note[note_click(mouse.y)],"note")
+                end
+            end
+            objact_message_box.message("add copy")
+
+            if #copy_tab.event >0 then
+                displayed_content = 'multiple_events_edit' --跳转到多事件编辑界面
+            end
+        end
+
+        if not love.mouse.isDown(1) then
+            return
+        end
         mouse_start_pos = {x = mouse.x, y = mouse.y}
     end,
     mousereleased = function(x,y)
         --松手＋shift确认选中
-        if not (iskeyboard.lshift == true or iskeyboard.rshift == true) then
+        if not ((iskeyboard.lshift == true or iskeyboard.rshift == true) and love.mouse.isDown(1) ) then
             return
         end
         copy_tab = {note = {},event = {}}
@@ -133,7 +192,7 @@ objact_copy = {
             local local_track = {} --记录表
             for i = 1,#chart.event do --点击轨道进入轨道的编辑事件
                 local track_x,track_w = event_get(chart.event[i].track,beat.nowbeat)
-                track_x,track_w = (track_x-track_w/2)*9,track_w*9
+                track_x,track_w = to_play_track(track_x,track_w)
                 if not (max_x < track_x or track_x + track_w < min_x) then
                     local_track[i] = true
                 end
@@ -212,13 +271,15 @@ objact_copy = {
                 end
             end
         end
-
+        if #copy_tab.event >0 then
+            displayed_content = 'multiple_events_edit' --跳转到多事件编辑界面
+        end
     end,
     wheelmoved = function(x,y)
         mouse_start_pos.y = mouse_start_pos.y + y
     end,
     keyboard = function(key)
-        if iskeyboard.lshift == true or iskeyboard.rshift == true and mouse.down_state == true then
+        if (iskeyboard.lshift == true or iskeyboard.rshift == true) and mouse.down_state == true then
             objact_copy.mousereleased(mouse.x,mouse.y)
         end
         
@@ -267,10 +328,28 @@ objact_copy = {
                 type = "", --类型是复制 还是裁剪
                 pos = "", --位置是游玩区域还是编辑区域
             }
-        elseif key == "v" or key == "b" then
-            displayed_content = "nil"
-            --先对表进行处理
+        elseif key == "v" or key == "b" or key == "n" then
             local copy_tab2 = copyTable(copy_tab)
+                        --先对表进行处理
+            local min_track
+            if copy_tab2.note[1] then
+                min_track = copy_tab2.note[1].track
+            end
+            if copy_tab2.event[1] then
+                min_track = copy_tab2.event[1].track
+            end
+            for i = 1,#copy_tab2.note do
+                if (not min_track) or min_track > copy_tab2.note[i].track then
+                    min_track = copy_tab2.note[i].track
+                end
+            end
+            for i = 1,#copy_tab2.event do
+                if (not min_track) or min_track > copy_tab2.event[i].track then
+                    min_track = copy_tab2.event[i].track
+                end
+            end
+            displayed_content = "nil"
+            
             local frist_beat = {0,0,4}  --作为基准
             if copy_tab.note[1] and copy_tab.event[1] and thebeat(copy_tab.note[1].beat) <= thebeat(copy_tab.event[1].beat) then
                 frist_beat = copy_tab.note[1].beat
@@ -285,13 +364,17 @@ objact_copy = {
             if copy_tab.note[1] and copy_tab.pos == 'play' and iskeyboard.a == false then --不完全复制
                 frist_beat = copy_tab.note[1].beat
             end
-            for i = 1, #copy_tab2.note do
+            for i = 1, #copy_tab2.note do --轨道修改
                 if copy_tab.pos ~= 'play' then
                     copy_tab2.note[i].track = track.track
                 end
                 copy_tab2.note[i].beat = beat_add(beat_sub(copy_tab2.note[i].beat,frist_beat),y_to_beat(mouse.y))
                 if copy_tab2.note[i].type == "hold" then
                     copy_tab2.note[i].beat2 = beat_add(beat_sub(copy_tab2.note[i].beat2,frist_beat),y_to_beat(mouse.y))
+                end
+                if key == "n" then --对所有轨道增加
+                    local max_track = track_get_max_track() + 1
+                    copy_tab2.note[i].track = max_track + copy_tab2.note[i].track - min_track
                 end
             end
             for i = 1, #copy_tab2.event do
@@ -300,9 +383,29 @@ objact_copy = {
                 end
                 copy_tab2.event[i].beat = beat_add(beat_sub(copy_tab2.event[i].beat,frist_beat),y_to_beat(mouse.y))
                 copy_tab2.event[i].beat2 = beat_add(beat_sub(copy_tab2.event[i].beat2,frist_beat),y_to_beat(mouse.y))
-                if key == "b" then --取反
+                if key == "b" and copy_tab2.event[i].type == "x" then --取反
                     copy_tab2.event[i].form = 100 - copy_tab2.event[i].form
                     copy_tab2.event[i].to = 100 - copy_tab2.event[i].to
+                end
+                if key == "n" then --对所有轨道增加
+                    local max_track = track_get_max_track() + 1
+                    copy_tab2.event[i].track = max_track + copy_tab2.event[i].track - min_track
+                end
+            end
+            if key == "n" then
+                local pos = 0 --鼠标所在位置
+                
+                if track.fence == 0 then
+                    pos = mouse.x / 9
+                else
+                    pos = (100 / track.fence * track_get_near_fence())
+                end
+                for i = 1,#copy_tab2.event do
+                    --处理一下位置
+                    if copy_tab2.event[i].type == "x" then
+                        copy_tab2.event[i].form = copy_tab2.event[i].form + pos
+                        copy_tab2.event[i].to = copy_tab2.event[i].to + pos
+                    end
                 end
             end
             --写入谱面内
@@ -325,13 +428,28 @@ objact_copy = {
                 end
                 return
             end
-
-            if copy_tab.pos ~= 'play' or (copy_tab.pos == 'play' and iskeyboard.a == true) then -- a完全复制
+            if copy_tab.type == "b" then
+                if copy_tab.pos ~= 'play' or (copy_tab.pos == 'play' and iskeyboard.a == true) then -- a完全复制
+                    objact_redo.write_revoke("copy",copyTable(copy_tab2))
+                else
+                    objact_redo.write_revoke("copy",{note = copyTable(copy_tab2.note),event = {}})
+                end
+                return
+            end
+            if copy_tab.type == "n" then
+                if copy_tab.pos ~= 'play' or (copy_tab.pos == 'play' and iskeyboard.a == true) then -- a完全复制
+                    objact_redo.write_revoke("copy",copyTable(copy_tab2))
+                else
+                    objact_redo.write_revoke("copy",{note = copyTable(copy_tab2.note),event = {}})
+                end
+                return
+            end
+            if copy_tab.pos ~= 'play' or (copy_tab.pos == 'play' and iskeyboard.a == true) then --
                 objact_redo.write_revoke("cropping",{copyTable(copy_tab),copyTable(copy_tab2)})
             else
                 objact_redo.write_revoke("cropping",{{note = copyTable(copy_tab.note),event = {}},{note = copyTable(copy_tab2.note),event = {}}} )
             end
-
+            --x 删除原来的
             local local_tab = {}
             for i = 1,#chart.note do
                 if not tablesEqual(copy_tab.note[1],chart.note[i]) then

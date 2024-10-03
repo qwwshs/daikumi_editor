@@ -1,20 +1,27 @@
 
-function tableToString(tbl, indent) -- 表转字符串
+function tableToString(tbl, indent,isrecursion) -- 表转字符串
+    if type(tbl) == "string" then
+        return
+    end
+    local the_n =  "\n"
+    if isrecursion == "recursion" then
+        the_n = ""
+    end
     indent = indent or 0
-    local str = "{\n"
+    local str = "{"..the_n
     for k, v in pairs(tbl) do
         local key = type(k) == "number" and "" or k
         local k1 = type(k) == "number" and "" or "="
         local indentStr = ""
         for i = 1, indent do
-            indentStr = indentStr .. "  "
+            indentStr = indentStr .. ""
         end
         if type(v) == "table" then
-            str = str .. indentStr .. key ..k1 .. tableToString(v, indent + 1) .. ",\n"
+            str = str .. indentStr .. key ..k1 .. tableToString(v, indent + 1,"recursion") .. ","..the_n
         elseif type(v) == "string" then
-            str = str .. indentStr .. key .. k1.."'" .. v .. "',\n"
+            str = str .. indentStr .. key .. k1.."'" .. v .. "',"..the_n
         else
-            str = str .. indentStr .. key .. k1 .. tostring(v) .. ",\n"
+            str = str .. indentStr .. key .. k1 .. tostring(v) .. ","..the_n
         end
     end
     local finalIndentStr = ""

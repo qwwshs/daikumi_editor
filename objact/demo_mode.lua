@@ -9,8 +9,6 @@ objact_demo_mode ={ --演示谱面用的
     keyboard = function(key)
         if key == "tab"  then
             if demo_mode == false then
-                time.nowtime = 0
-                music_play = false
                 music_speed = 1
             end
             demo_mode = not demo_mode

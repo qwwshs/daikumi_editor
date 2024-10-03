@@ -24,15 +24,12 @@ objact_button_break = {
     keyboard = function(key)
         if key == "escape" then
             displayed_content = "nil" --回到主界面
-            input_box_delete_all() -- 删除所有输入框
             
         end
     end,
     mousepressed = function( x1, y1, button, istouch, presses )
         if x1 >= x  and x1 <= x + w and y1 <= y + h and y1 >= y then -- 在退出的范围内
             objact_button_break.keyboard("escape")
-            switch_delete_all()
-            input_box_delete_all()
         end
     end,
 }

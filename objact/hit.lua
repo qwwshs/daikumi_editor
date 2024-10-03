@@ -33,14 +33,14 @@ objact_hit = {
                 local x,w = event_get(chart.note[i].track,beat.nowbeat)
                 hit_sound_tab["b"..thebeat(chart.note[i].beat).."tk"..chart.note[i].track.."ty"..chart.note[i].type] = false --播放完成
 
-                if hit_sound and settings.hit_sound == 1 and music_play == true and w > 0 then --播放
+                if hit_sound and settings.hit_sound == 1 and music_play == true and w > 0 and not( chart.note[i].fake == 1) then --播放
                     love.audio.setVolume( settings.hit_volume / 100 ) --设置音量大小
                     hit_sound:seek(0)
                     hit_sound:play()
                 end
-                if settings.hit == 1 and music_play == true and w > 0 then
+                if settings.hit == 1 and music_play == true and w > 0 and not( chart.note[i].fake == 1) then
                     
-                    hit_tab[#hit_tab + 1] = {x = x * 9,time = time.nowtime}
+                    hit_tab[#hit_tab + 1] = {x = to_play_track_original_x(x),time = time.nowtime}
                 end
             end
             if thebeat(chart.note[i].beat) >= beat.nowbeat then
@@ -61,7 +61,12 @@ objact_hit = {
     draw = function()
         for i = 1,#hit_tab do
             local hit_w, hit_h = hit[1]:getDimensions( ) -- 得到宽高
-            local hit_scale = 1 / hit_h * 500
+            local hit_scale_w = 1 / hit_w * 500
+            local hit_scale_h = 1 / hit_h * 500 / (window_h_scale / window_w_scale)
+            if demo_mode == true then
+                hit_scale_h = 1 / hit_h * 500 / (window_h_scale / window_w_scale)   / ((1 + 150 / 800) / (1600/900))
+                hit_scale_w = 1 / hit_w * 500
+            end
             love.graphics.setColor(1,1,1,1)
             local v = math.floor((time.nowtime - hit_tab[i].time) / 0.5 * 19)+1
             if v > 19 then
@@ -71,12 +76,17 @@ objact_hit = {
                 v = 1
                 love.graphics.setColor(1,1,1,0)
             end
-            local note_angle = math.acos( (hit_tab[i].x-450) / (settings.judge_line_y-note_occurrence_point *math.tan(math.rad(settings.angle)) ))
+            local hit_angle = math.acos( (hit_tab[i].x-450) / (settings.judge_line_y-note_occurrence_point *math.tan(math.rad(settings.angle)) ))
             love.graphics.push()
             love.graphics.translate(450, settings.judge_line_y)
-            love.graphics.shear(math.cos(note_angle),0)  -- 水平倾斜，适应轨道
-            love.graphics.draw(hit[v]
-            ,hit_tab[i].x-450-250,-250 ,0,hit_scale,hit_scale)
+            love.graphics.shear(math.cos(hit_angle),0)  -- 水平倾斜，适应轨道
+            if demo_mode then
+                love.graphics.draw(hit[v]
+                ,hit_tab[i].x-450-250,-250 / (window_h_scale / window_w_scale)/ ((1 + 150 / 800) / (1600/900)),0,hit_scale_w,hit_scale_h)
+            else
+                love.graphics.draw(hit[v]
+                ,hit_tab[i].x-450-250,-250 /(window_h_scale / window_w_scale),0,hit_scale_w,hit_scale_h)
+            end
             love.graphics.pop()
         end
     end

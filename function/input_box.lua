@@ -2,16 +2,30 @@
 local input_box_objact = {} --对象
 local input_string = ""
 local input_string_index = 1 --键入位置
-function input_box_new(name,var,x,y,w,h,type) --名字 与所对应的变量
-    local istype = type
-    if not type then
-        istype = "string"
+local function pass() --默认函数
+    --pass
+end
+local meta_type = {__index ={
+    type = "string",
+    input_ed = pass,  --输入完成处理完成之前的回调函数
+    input_ed_finish = pass, --输入完成处理完成之后的回调函数
+    will_draw = pass, --确认是否绘画
+}}
+function input_box_new(name,var,x,y,w,h,thetype) --名字 与所对应的变量
+    local istype = thetype or {}
+    if type(thetype) ~= "table" then
+        istype = {}
     end
+    setmetatable(istype,meta_type)
+    fillMissingElements(istype,meta_type.__index)
     input_box_objact[name] = {var = var,x = x,y = y,w = w,h = h,in_input = false,type = istype} --type是用来判断文本类型的（其实只有num和str）
 end
 
 function input_box_draw(name)
-    love.graphics.setColor(1,1,1,0.5)
+    if not input_box_objact[name].type.will_draw() then
+        return
+    end
+    love.graphics.setColor(1,1,1,0.3)
     love.graphics.rectangle("fill",input_box_objact[name].x,input_box_objact[name].y,input_box_objact[name].w,input_box_objact[name].h) --输入框内框
     love.graphics.setColor(0,0,0,1)
     if loadstring("return _G."..input_box_objact[name].var)() and input_box_objact[name].in_input == false then
@@ -38,16 +52,18 @@ end
 function input_box_mousepressed(x,y) --查询
     for i, v in pairs(input_box_objact) do  -- 赋值
         if input_box_objact[i].in_input == true then 
-            if input_box_objact[i].type == "number" and 
-            not loadstring("return to"..input_box_objact[i].type.."'"..input_string.."'")() then  --有人往数字里面输入字符串
+            input_box_objact[i].type.input_ed(input_string)
+            if input_box_objact[i].type.type == "number" and 
+            not loadstring("return to"..input_box_objact[i].type.type.."'"..input_string.."'")() then  --有人往数字里面输入字符串
                 input_string = 1
             end
-            if input_box_objact[i].type ~= "number" and type(input_string) ~= 'string' then
+            if input_box_objact[i].type.type ~= "number" and type(input_string) ~= 'string' then
                 input_string = "1"
             end
-            loadstring("_G."..input_box_objact[i].var.."=".. "to"..input_box_objact[i].type.."([["..input_string.."]])")()
+            loadstring("_G."..input_box_objact[i].var.."=".. "to"..input_box_objact[i].type.type.."([["..input_string.."]])")()
             input_string = " "
             input_string_index = 1
+            input_box_objact[i].type.input_ed_finish(input_string)
         end -- 赋值
     end
     input_string = ""
@@ -55,7 +71,8 @@ function input_box_mousepressed(x,y) --查询
         input_box_objact[i].in_input = false --全部初始化
 
         if x >= input_box_objact[i].x and x <= input_box_objact[i].x + input_box_objact[i].w 
-        and y <= input_box_objact[i].y + input_box_objact[i].h and y >= input_box_objact[i].y then
+        and y <= input_box_objact[i].y + input_box_objact[i].h and y >= input_box_objact[i].y and 
+        input_box_objact[i].type.will_draw() then
                 input_box_objact[i].in_input = true
                 if loadstring("return _G."..input_box_objact[i].var)() then
                     input_string = tostring(loadstring("return _G."..input_box_objact[i].var)())
@@ -124,27 +141,32 @@ function input_box_key(key) --键入内容
 
         input_string = string.sub(input_string,1,input_string_index)..text..string.sub(input_string,input_string_index,#input_string)
         input_string_index = input_string_index + #text
+
     elseif key == "return" or key == "escape" then -- 关闭 
         input_type = false
         for i, v in pairs(input_box_objact) do
+            if input_box_objact[i].in_input == true then
+                input_box_objact[i].type.input_ed(input_string)
+            end
             if input_box_objact[i].in_input == true and
-            input_box_objact[i].type == "number" and 
-            not loadstring("return to"..input_box_objact[i].type.."'"..input_string.."'")() then  --有人往数字里面输入字符串
+            input_box_objact[i].type.type == "number" and 
+            not loadstring("return to"..input_box_objact[i].type.type.."'"..input_string.."'")() then  --有人往数字里面输入字符串
                 input_string = 1
             end
-            if input_box_objact[i].type ~= "number" and type(input_string) ~= 'string'then
+            if input_box_objact[i].type.type ~= "number" and type(input_string) ~= 'string'then
                 input_string = "1"
             end
             if input_box_objact[i].in_input == true then
-                loadstring("_G."..input_box_objact[i].var.."=".. "to"..input_box_objact[i].type.."([["..input_string.."]])")()
+                loadstring("_G."..input_box_objact[i].var.."=".. "to"..input_box_objact[i].type.type.."([["..input_string.."]])")()
                 input_box_objact[i].in_input = false
+                input_box_objact[i].type.input_ed_finish(input_string)
             end
         end
     end
 
-    if input_string_index > #input_string  then
-        input_string_index = #input_string 
-    elseif input_string_index < 0 then
+    if  type(input_string) == "string" and input_string_index > #input_string  then
+        input_string_index = #input_string
+    elseif type(input_string) == "string" and input_string_index < 0 then
         input_string_index = 0
     end
 end
@@ -157,10 +179,8 @@ function input_box_delete_all() --删除 全部
     input_box_objact = {}
 end
 
-function input_box_wheelmoved(x,y) --滑轮滚动 使全体位移
-    for i, v in pairs(input_box_objact) do
-        input_box_objact[i].y = input_box_objact[i].y + y *10
-    end
+function input_box_wheelmoved(x,y,name) --滑轮滚动 使全体位移
+    input_box_objact[name].y = input_box_objact[name].y + y *10
 end
 
 function input_box_query_type_true() --查询现在所选择的框

@@ -8,15 +8,18 @@ local input_type = false --输入状态
 local type = "info"
 local ui_break = love.graphics.newImage("asset/ui_break.png")
 local chart_info_pos_y = 0 --位移
+local function will_draw()
+    return room_type(type) and the_room_pos("edit")
+end
 objact_chart_info = {
     bpm_list_load = function() -- 只改变bpmlist
             --bpmlist表
             bpm_list_sort()
             for i = 1, #chart.bpm_list do
-                input_box_new("bpm"..i,"chart.bpm_list["..i.."].bpm",x,y+160+i*30 + chart_info_pos_y,w/2,20,"number")
-                input_box_new("bpm_beat1"..i,"chart.bpm_list["..i.."].beat[1]",x+w/2+10,y+160+i*30 + chart_info_pos_y,w/2,20,"number")
-                input_box_new("bpm_beat2"..i,"chart.bpm_list["..i.."].beat[2]",x+w+20,y+160+i*30 + chart_info_pos_y,w/2,20,"number")
-                input_box_new("bpm_beat3"..i,"chart.bpm_list["..i.."].beat[3]",x+w+w/2+30,y+160+i*30 + chart_info_pos_y,w/2,20,"number")
+                input_box_new("bpm"..i,"chart.bpm_list["..i.."].bpm",x,y+160+i*30 + chart_info_pos_y,w/2,20,{type ="number",will_draw = will_draw})
+                input_box_new("bpm_beat1"..i,"chart.bpm_list["..i.."].beat[1]",x+w/2+10,y+160+i*30 + chart_info_pos_y,w/2,20,{type ="number",will_draw = will_draw})
+                input_box_new("bpm_beat2"..i,"chart.bpm_list["..i.."].beat[2]",x+w+20,y+160+i*30 + chart_info_pos_y,w/2,20,{type ="number",will_draw = will_draw})
+                input_box_new("bpm_beat3"..i,"chart.bpm_list["..i.."].beat[3]",x+w+w/2+30,y+160+i*30 + chart_info_pos_y,w/2,20,{type ="number",will_draw = will_draw})
             end
     end,
     load = function(x1,y1,r1,w1,h1)
@@ -30,15 +33,14 @@ objact_chart_info = {
         if not room_type(type) then
             return
         else
-            input_box_delete_all()
-            switch_delete_all()
-            input_box_new("chartor","chart.info.chartor",x+ w + 10,y+40 + chart_info_pos_y,w,20)
-            input_box_new("artist","chart.info.artist",x + w + 10,y+80 + chart_info_pos_y,w,20)
 
-            input_box_new("chart","chart.info.chart_name",x,y+40 + chart_info_pos_y,w,20)
-            input_box_new("music","chart.info.song_name",x,y+80 + chart_info_pos_y,w,20)
+            input_box_new("chartor","chart.info.chartor",x+ w + 10,y+40 + chart_info_pos_y,w,20,{type ="string",will_draw = will_draw})
+            input_box_new("artist","chart.info.artist",x + w + 10,y+80 + chart_info_pos_y,w,20,{type ="string",will_draw = will_draw})
 
-            input_box_new("offset","chart.offset",x,y+120,w,20 + chart_info_pos_y,"number")
+            input_box_new("chart","chart.info.chart_name",x,y+40 + chart_info_pos_y,w,20,{type ="string",will_draw = will_draw})
+            input_box_new("music","chart.info.song_name",x,y+80 + chart_info_pos_y,w,20,{type ="string",will_draw = will_draw})
+
+            input_box_new("offset","chart.offset",x,y+120,w,20 + chart_info_pos_y,"number",{type ="number",will_draw = will_draw})
             objact_chart_info.bpm_list_load()
         end
 
@@ -50,15 +52,13 @@ objact_chart_info = {
         end
         
 
-        --输入框
-        input_box_draw_all()
         love.graphics.setColor(1,1,1,1)
         love.graphics.print(objact_language.get_string_in_languages("chart"),x,y+20 + chart_info_pos_y) 
         love.graphics.print(objact_language.get_string_in_languages("music"),x,y+60 + chart_info_pos_y) 
         love.graphics.print(objact_language.get_string_in_languages("chartor"),x+w+10,y+20 + chart_info_pos_y) 
         love.graphics.print(objact_language.get_string_in_languages("artist"),x+w+10,y+60 + chart_info_pos_y) 
 
-        love.graphics.print(objact_language.get_string_in_languages("offset"),x,y+100 + chart_info_pos_y)
+        love.graphics.print(objact_language.get_string_in_languages("offset(ms)"),x,y+100 + chart_info_pos_y)
         love.graphics.print(objact_language.get_string_in_languages("bpm"),x,y+160 + chart_info_pos_y)
         love.graphics.print(objact_language.get_string_in_languages("beat"),x+w+20,y+160 + chart_info_pos_y)
 
@@ -72,7 +72,6 @@ objact_chart_info = {
         time.alltime = music:getDuration() + chart.offset / 1000 -- 得到音频总时长
         beat.allbeat = time_to_beat(chart.bpm_list,time.alltime)
         objact_bpm_list.mousepressed(x1,y1)
-        input_box_mousepressed(x1, y1)
         bpm_list_sort()
     end,
     keypressed = function(key)
@@ -86,7 +85,12 @@ objact_chart_info = {
         if not room_type(type) then
             return
         end
-        input_box_wheelmoved(x,y)
+        input_box_wheelmoved(x,y,"chartor")
+        input_box_wheelmoved(x,y,"artist")
+        input_box_wheelmoved(x,y,"chart")
+        input_box_wheelmoved(x,y,"music")
+        input_box_wheelmoved(x,y,"offset")
         chart_info_pos_y = chart_info_pos_y + y * 10
+        objact_bpm_list.wheelmoved(x,y)
     end
 }

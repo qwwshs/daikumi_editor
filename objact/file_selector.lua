@@ -13,6 +13,13 @@ local now_drive_letter_pos = 1 --现在选择的盘
 local now_file_pos = 1 --现在选择的文件
 local drive_letter_pos_move = 0 --位移
 local file_pos_move = 0 --位移
+
+local function input()
+        objact_selector.anew_find()
+end
+local function will_draw()
+    return selector_file_open
+end
 objact_selector = {
     open = function()
         selector_file_open = true
@@ -23,7 +30,7 @@ objact_selector = {
     load_path = function() --对路径初始化
         selector_now_path = "C:/"
         all_file = nativefs.getDirectoryItems(selector_now_path) --得到文件夹下的所有文件
-        input_box_new("selector_now_path",'selector_now_path',x+100,y+5,w - 200,20)
+        input_box_new("selector_now_path",'selector_now_path',x+100,y+5,w - 200,20,{input_ed_finish = input,will_draw = will_draw})
     end,
     anew_find = function() --重新搜索路径
         all_file = nativefs.getDirectoryItems(selector_now_path) --得到文件夹下的所有文件
@@ -97,7 +104,6 @@ objact_selector = {
         end
         
 
-        input_box_draw_all()
         objact_selector_break.draw()
         objact_selector_close.draw()
         objact_selector_refresh.draw()
@@ -107,7 +113,6 @@ objact_selector = {
             return
         end
         if x1 >= x and x1 <= x + w and y1 <= y + h and y1 >= y then -- 在范围内
-            input_box_mousepressed(x1,y1)
             objact_selector.anew_find()
             if x1 > 100 + x then --文件选择
                 if now_file_pos == math.floor((y1-20-y)/20) - file_pos_move then --进入
@@ -199,9 +204,6 @@ objact_selector = {
     keyboard = function(key)
         if selector_file_open == false then
             return
-        end
-        if key == "return" or key == "escape" then -- 关闭 
-            objact_selector.anew_find()
         end
     end,
     update = function(dt)

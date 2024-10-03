@@ -6,6 +6,7 @@ local h = 0
 local control_point = {} --两个控制点的坐标
 local isbutton = false --按住状态
 local button_control = 1 -- 按住第几个控制点
+
 objact_event_edit_bezier = { --bezier编辑
     load = function(x1,y1,r1,w1,h1)
         x= x1 --初始化

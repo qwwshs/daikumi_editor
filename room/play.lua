@@ -4,15 +4,33 @@ local ui_wipe = love.graphics.newImage("asset/ui_wipe.png")
 local ui_hold = love.graphics.newImage("asset/ui_hold_head.png")
 local ui_hold_body = love.graphics.newImage("asset/ui_hold_body.png")
 local ui_hold_tail = love.graphics.newImage("asset/ui_hold_tail.png")
+local ui_tab = love.filesystem.getDirectoryItems("ui") --得到文件夹下的所有文件
+if ui_tab and #ui_tab > 0 then
+    for i=1,#ui_tab do
+        local v = ui_tab[i]
+        if string.find(v,"ui_note") then
+            ui_note = love.graphics.newImage("ui/"..v)
+        elseif string.find(v,"ui_wipe") then
+            ui_wipe = love.graphics.newImage("ui/"..v)
+        elseif string.find(v,"ui_hold_head") then
+            ui_hold = love.graphics.newImage("ui/"..v)
+        elseif string.find(v,"ui_hold_body") then
+            ui_hold_body = love.graphics.newImage("ui/"..v)
+        elseif string.find(v,"ui_hold_tail") then
+            ui_hold_tail = love.graphics.newImage("ui/"..v)
+        end
+    end
+end
 local pos = "edit"
 room_play = { -- 最基础的 播放页面
 load = function()
     objact_hit.load()
-    objact_music_speed.load(650,50,0,25,25)
+    objact_music_speed.load(575,50,0,25,25)
     objact_denom.load(875,50,0,25,25)
     objact_track.load(725,50,0,25,25)
     objact_track_scale.load(800,50,0,25,25)
-    objact_music_play.load(500,50,0,50,50)
+    objact_track_fence.load(650,50,0,25,25)
+    objact_music_play.load(400,50,0,50,50)
     objact_note.load(400,50,0,50,16.6)
     objact_note.load(100,50,0,50,16.6)
     objact_note_edit_inplay.load(100,50,0,50,16.6)
@@ -52,6 +70,8 @@ draw = function()
     love.graphics.setColor(0,0,0,1) --游玩区域显示的背景板2底板
     love.graphics.rectangle("fill",0,settings.judge_line_y,900,800 - settings.judge_line_y)
 
+
+
     local drawed_track = {} --已经绘制的track
     for i=1 ,#chart.event do --轨道底板绘制
         if thebeat(chart.event.beat) > beat.nowbeat then
@@ -59,7 +79,7 @@ draw = function()
         end
         if drawed_track[chart.event[i].track] == nil then
             local x,w = event_get(chart.event[i].track,beat.nowbeat)
-            x,w =  (x-w/2) *9,w*9 --为了居中
+            x,w = to_play_track(x,w) --为了居中
             --倾斜计算
             if w ~= 0 then
                 love.graphics.setColor(0,0,0,0.5 )  --底板
@@ -73,7 +93,7 @@ draw = function()
     for i=1 ,#chart.event do --轨道侧线绘制
         if drawed_track[chart.event[i].track] == nil then
             local x,w = event_get(chart.event[i].track,beat.nowbeat)
-            x,w =  (x-w/2) *9,w*9 --为了居中
+            x,w = to_play_track(x,w) --为了居中
             --倾斜计算
 
             if track.track == chart.event[i].track and draw_exist == false and demo_mode == false then --选择时的底板
@@ -96,6 +116,14 @@ draw = function()
         end
     end
 
+    --游玩区域侧线
+    love.graphics.setColor(1,1,1,1) --侧线
+    local x,w = to_play_track(0,1)
+    love.graphics.polygon("fill",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
+    x,w = to_play_track(100,1)
+    love.graphics.polygon("fill",x,settings.judge_line_y,x+w,settings.judge_line_y,450,note_occurrence_point*math.tan(math.rad(settings.angle)))
+    
+    
     local note_h = settings.note_height --25 * denom.scale
     local note_w = 75
     love.graphics.setColor(1,1,1,settings.note_alpha / 100)
@@ -107,10 +135,20 @@ draw = function()
         if chart.note[i].type == "hold" then
             y2 = beat_to_y(chart.note[i].beat2)
         end
-        local original_x = x*9 --原始x没有因为居中修改坐标
-        x,w =  (x-w/2) *9,w*9 --为了居中
+        local original_x = to_play_track_original_x(x) --原始x没有因为居中修改坐标
+        local original_w = to_play_track_original_w(w) --原始x没有因为居中修改坐标
+        x,w = to_play_track(x,w) --为了居中
+        if w > 40 and chart.note[i].type ~= "wipe" then --增加间隙
+            w = w - 20
+        elseif w <= 40 and w > 20 and chart.note[i].type ~= "wipe" then
+            w = 20
+        elseif w > 60 and chart.note[i].type == "wipe" then --增加间隙
+            w = w - 30
+        elseif w <= 60 and w > 30 and chart.note[i].type == "wipe" then
+            w = 30
+        end
         
-        if not  (y2 > 800 + note_h or y < 0 -  note_h) then
+        if (not  (y2 > 800 + note_h or y < 0 -  note_h)) and (not  (y > settings.judge_line_y and chart.note[i].fake == 1  ) )then
             local to_3d = (y - note_occurrence_point * math.tan(math.rad(settings.angle))) / 
                 (settings.judge_line_y - note_occurrence_point * math.tan(math.rad(settings.angle))) --变成伪3d y 比上长度
             local to_3d_w =  w *to_3d
@@ -119,7 +157,7 @@ draw = function()
 
             --图像范围限制函数
             local function myStencilFunction()
-                love.graphics.polygon("fill",x-450,settings.judge_line_y-y,x-450+w,settings.judge_line_y-y,0,note_occurrence_point*math.tan(math.rad(settings.angle))-y)
+                love.graphics.polygon("fill",x-450,settings.judge_line_y-y,x-450+original_w,settings.judge_line_y-y,0,note_occurrence_point*math.tan(math.rad(settings.angle))-y)
             end
 
             --使图片倾斜
@@ -245,12 +283,17 @@ draw = function()
     love.graphics.rectangle("fill",900,settings.judge_line_y,275,10)
 
     
+    love.graphics.setColor(1,1,1,1) --总note event 数
+    local str = 'note: '..#chart.note..'  event: '..#chart.event
+    love.graphics.print(str,450 - #str * 4 /2,settings.judge_line_y + 60)
 
 
     
     love.graphics.setColor(1,1,1,1) --现在节拍
-    love.graphics.print(beat.nowbeat,900,settings.judge_line_y+20)
-    
+    love.graphics.print(math.floor(beat.nowbeat*100)/100,900,settings.judge_line_y+20)
+    local now_x,now_w = event_get(track.track,beat.nowbeat)
+    love.graphics.print(math.floor(now_x*100)/100,1000,settings.judge_line_y+20)
+    love.graphics.print(math.floor(now_w*100)/100,1100,settings.judge_line_y+20)
         for isbeat = 0, beat.allbeat do -- beat和分度的渲染
             local denom_size = 1
             local beat_y = 0
@@ -258,20 +301,22 @@ draw = function()
                 local denom_beat = (1 / denom.denom)* isdenom 
                 beat_y = beat_to_y(isbeat - denom_beat)
                 if beat_y > 0 and beat_y < 800 then
+                    local r,g,b = 1,1,1
                     if denom_size > 0 and denom_size < 10 then
-                        love.graphics.setColor(RGBA_hexToRGBA("#FF646464"))
+                        r,g,b = RGBA_hexToRGB("#646464")
 
                         if denom.denom % 3 == 0 and denom.denom % 4 ~= 0 then
-                            love.graphics.setColor(RGBA_hexToRGBA("#6400FF37"))
+                            r,g,b = RGBA_hexToRGB("#00FF37")
                         end
 
                         if  isdenom % 2 == 0 and denom.denom % 2 == 0 then
-                            love.graphics.setColor(RGBA_hexToRGBA("#FFCD37FF"))
+                            r,g,b = RGBA_hexToRGB("#CD37FF")
                         end
 
                         if isdenom  == denom.denom / 2 then --中线
-                            love.graphics.setColor(RGBA_hexToRGBA("#FF7FFFF4"))
+                            r,g,b = RGBA_hexToRGB("#7FFFF4")
                         end
+                        love.graphics.setColor(r,g,b,settings.denom_alpha/100)
                         love.graphics.rectangle("fill",0,beat_y,1175,1)
                     end
                 end
@@ -291,7 +336,7 @@ draw = function()
                     mouse_min_denom = i
                 end
             end
-            local mouse_y = settings.judge_line_y + (beat.nowbeat - math.floor(mouse_beat)-mouse_min_denom / denom.denom) * denom.scale * 100
+            local mouse_y = beat_to_y(math.floor(mouse_beat) + mouse_min_denom / denom.denom)
             love.graphics.setColor(1,1,1,0.5)
             love.graphics.rectangle("fill",0,mouse_y,1200,2)
         end
@@ -325,6 +370,7 @@ draw = function()
     --note(edit区域渲染)
     for i=1,#chart.note do
         if chart.note[i].track == track.track then
+            
             local y = beat_to_y(chart.note[i].beat)
             local y2 = y
             if chart.note[i].type == "hold" then
@@ -346,6 +392,12 @@ draw = function()
                     love.graphics.draw(ui_hold_body,900,y2+note_h,0,_scale_w,_scale_h2) --身
 
                 end
+                if chart.note[i].fake and chart.note[i].fake == 1 then --假note
+                    love.graphics.setColor(1,0,0,1) 
+                    love.graphics.rectangle('line',900,y-note_h,note_w,note_h)
+                    love.graphics.print('false',910,y-note_h)
+                    love.graphics.setColor(1,1,1,1) 
+                end
             elseif y < -note_h then
                 break
             end
@@ -360,9 +412,26 @@ draw = function()
         local _scale_h = 1 / _height * note_h
         love.graphics.setColor(1,1,1,1)
         local y = beat_to_y(thelocal_hold.beat)
-        if y > 0 - note_h and y < 800 + note_h then
-            love.graphics.draw(ui_hold,900,y-note_h,0,_scale_w,_scale_h) -- 头
-        end
+        local y2 = mouse.y
+        local note_h2 = y - y2 -note_h  * 2
+        local _scale_h2 = 1 / _height * note_h2
+            if not (y2 > 800 + note_h or y < -note_h) then
+                love.graphics.draw(ui_hold,900,y-note_h,0,_scale_w,_scale_h) --头
+                love.graphics.draw(ui_hold_body,900,y2+note_h,0,_scale_w,_scale_h2) --身
+                love.graphics.draw(ui_hold_tail,900,y2,0,_scale_w,_scale_h) --尾
+            end
+    end
+
+    if string.sub(displayed_content,1,4) == "note" and --选中event框绘制
+        chart.note[tonumber(string.sub(displayed_content,5,#displayed_content))].track == track.track then --框出现在编辑的event
+            local y = beat_to_y(chart.note[tonumber(string.sub(displayed_content,5,#displayed_content))].beat)
+            local y2 = y - note_h
+            if chart.note[tonumber(string.sub(displayed_content,5,#displayed_content))].type == 'hold' then
+                y2 = beat_to_y(chart.note[tonumber(string.sub(displayed_content,5,#displayed_content))].beat2)
+            end
+            love.graphics.setColor(1,1,1,0.5)
+            love.graphics.rectangle("fill",900,y2,75,y - y2)
+            
     end
 
         --event渲染
@@ -410,13 +479,18 @@ draw = function()
             local _scale_h = 1 / _height * event_h
             love.graphics.setColor(1,1,1,1)
             local y = beat_to_y(thelocal_event.beat)
-            --头
-            if y > 0 - note_h and y < 800 + note_h then
-                if thelocal_event.type == "x" then
-                    love.graphics.draw(ui_hold,1000,y-note_h,0,_scale_w,_scale_h)
-                else -- w
-                    love.graphics.draw(ui_hold,1100,y-note_h,0,_scale_w,_scale_h)
-                end
+            local y2 = mouse.y
+            local event_h2 = y - y2 - event_h * 2
+            local _scale_h2 = 1 / _height * event_h2
+            local x_pos = 1000
+
+            if thelocal_event.type == "w" then
+                x_pos = 1100
+            end
+            if not (y2 > 800 + note_h or y < -note_h) then
+                love.graphics.draw(ui_hold,x_pos,y-note_h,0,_scale_w,_scale_h) --头
+                love.graphics.draw(ui_hold_body,x_pos,y2+event_h,0,_scale_w,_scale_h2) --身
+                love.graphics.draw(ui_hold_tail,x_pos,y2,0,_scale_w,_scale_h) --尾
             end
         end
 
@@ -432,6 +506,13 @@ draw = function()
             end
             
         end
+    --栅栏绘制
+    love.graphics.setColor(1,1,1,0.5)
+    for i = 1, track.fence do
+        love.graphics.rectangle("fill",900 / track.fence * i,100,2,900)
+    end
+    love.graphics.setColor(0,1,1,0.7)
+    love.graphics.rectangle("fill",900 / track.fence * track_get_near_fence(),100,2,900)
 
     --顶上的工具栏
     love.graphics.setColor(RGBA_hexToRGBA("#64646464"))
@@ -447,7 +528,7 @@ draw = function()
     --ui 轨道缩放 第几轨道
     objact_track_scale.draw()
     objact_track.draw()
-
+    objact_track_fence.draw()
     --播放键
     objact_music_play.draw()
 
@@ -480,7 +561,7 @@ keypressed = function(key)
     objact_track_scale.keyboard(key)
 
     objact_music_play.keyboard(key)
-
+    objact_note_event_move.keyboard(key)
     objact_note.keyboard(key)
     objact_note_edit_inplay.keyboard(key)
     objact_event.keyboard(key)
@@ -540,8 +621,10 @@ mousepressed = function( x, y, button, istouch, presses )
     objact_music_speed.mousepressed( x, y, button, istouch, presses )
     objact_track_scale.mousepressed( x, y, button, istouch, presses )
     objact_track.mousepressed( x, y, button, istouch, presses )
+    objact_track_fence.mousepressed( x, y, button, istouch, presses )
     objact_music_play.mousepressed( x, y, button, istouch, presses )
     objact_event.mousepressed( x, y, button, istouch, presses )
+    objact_note.mousepressed( x, y, button, istouch, presses )
     objact_save.mousepressed( x, y, button, istouch, presses )
     objact_slider.mousepressed( x, y, button, istouch, presses )
     objact_copy.mousepressed(x, y, button, istouch, presses)

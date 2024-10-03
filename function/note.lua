@@ -6,6 +6,22 @@ function hold_clean_up() --长条清除
     hold_type = 0
 end
 -- note函数
+function note_click(pos)
+    --检测区间
+    local pos_interval = 20 * denom.scale
+    --根据距离反推出beat
+    local note_beat_up = y_to_beat(pos - pos_interval)
+    local note_beat_down = y_to_beat(pos + pos_interval)
+    for i = 1,#chart.note do
+        if chart.note[i].track == track.track and 
+        ((thebeat(chart.note[i].beat) >= note_beat_down and thebeat(chart.note[i].beat) <= note_beat_up)
+        or (chart.note[i].beat2 and -- 长条
+        (thebeat(chart.note[i].beat) <= note_beat_down and thebeat(chart.note[i].beat2) >= note_beat_down)
+        or (thebeat(chart.note[i].beat) <= note_beat_up and thebeat(chart.note[i].beat2) >= note_beat_up))) then
+            return i
+        end
+    end
+end
 
 function note_delete(pos)
     --删除检测区间
@@ -47,23 +63,25 @@ function note_place(note_type,pos)
         chart.note[#chart.note + 1] = {
             type = note_type,
             track = track.track,
-            beat = {math.floor(note_beat),note_min_denom,denom.denom}
+            beat = {math.floor(note_beat),note_min_denom,denom.denom},
+            fake = 0
         }
         local_tab = {type = note_type,
         track = track.track,
-        beat = {math.floor(note_beat),note_min_denom,denom.denom}}
+        beat = {math.floor(note_beat),note_min_denom,denom.denom},fake = 0}
     else
         if hold_type == 0 then --放置头
             local_hold = {
                 type = note_type,
                 track = track.track,
-                beat = {math.floor(note_beat),note_min_denom,denom.denom}
+                beat = {math.floor(note_beat),note_min_denom,denom.denom},
+                fake = 0
             }
             hold_type = 1
             
             local_tab = {type = note_type,
             track = track.track,
-            beat = {math.floor(note_beat),note_min_denom,denom.denom}}
+            beat = {math.floor(note_beat),note_min_denom,denom.denom},fake = 0}
 
         elseif hold_type == 1 then
             local_hold.beat2 = {math.floor(note_beat),note_min_denom,denom.denom} 

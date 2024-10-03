@@ -7,8 +7,9 @@ local h = 0
 local r = 0
 local ui_up = love.graphics.newImage("asset/ui_up.png")
 local ui_down = love.graphics.newImage("asset/ui_down.png")
-local input_type = false --输入状态
-local input_string = "" --键入的内容
+local function will_draw()
+    return the_room_pos("edit")
+end
 objact_track = { --改变现在显示的轨道
     load = function(x1,y1,r1,w1,h1)
         x= x1 --初始化
@@ -16,7 +17,8 @@ objact_track = { --改变现在显示的轨道
         w = w1
         h = h1
         r = r1
-        input_string = track.track
+
+        input_box_new("track","track.track",x-50,y + h,50,h,{type = "number",will_draw = will_draw})
     end,
     draw = function()
         local _width, _height = ui_up:getDimensions( ) -- 得到宽高
@@ -28,15 +30,6 @@ objact_track = { --改变现在显示的轨道
         love.graphics.draw(ui_down,x,y+h,r,_scale_w,_scale_h)
         love.graphics.print(objact_language.get_string_in_languages("track"),x-50,y)
 
-        love.graphics.setColor(0.1,0.1,0.1,0.5)
-        love.graphics.rectangle("fill",x-50,y + h,50,h) --输入框
-        love.graphics.setColor(1,1,1,1)
-        love.graphics.print(input_string,x-25,y + h) --输入框
-
-        if input_type == true then -- 输入状态
-            love.graphics.setColor(1,1,1,1)
-            love.graphics.rectangle("line",x-50,y + h,50,h) --输入框外框
-        end
     end,
     keyboard = function(key)
         if key == "right" then
@@ -63,13 +56,6 @@ objact_track = { --改变现在显示的轨道
     end,
     mousepressed = function( x1, y1, button, istouch, presses )
         
-        if x1 >= x -50  and x1 <= x and y1 <= y + h + h and y1 >= y + h then -- 在输入框的范围内
-            input_type = true
-        else
-            input_type = false
-            track.track = tonumber(input_string) or 1
-            input_string = track.track
-        end
         if x1 >= x  and x1 <= x + w and y1 <= y + h and y1 >= y then -- 在up的范围内
             objact_track.keyboard("right")
             

@@ -69,4 +69,12 @@ objact_bpm_list = {
             end
         end
     end,
+    wheelmoved = function(x,y)
+        for i = 1, #chart.bpm_list do
+            input_box_wheelmoved(x,y,"bpm"..i)
+            input_box_wheelmoved(x,y,"bpm_beat1"..i)
+            input_box_wheelmoved(x,y,"bpm_beat2"..i)
+            input_box_wheelmoved(x,y,"bpm_beat3"..i)
+        end
+    end
 }

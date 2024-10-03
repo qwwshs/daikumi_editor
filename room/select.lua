@@ -29,7 +29,10 @@ room_select = {
         for i ,v in ipairs(temporary_tab) do
             love.filesystem.remove("temporary".."/"..v)
         end
-
+        local ui_tab,ui_type = love.filesystem.getDirectoryItems("ui") --得到文件夹下的所有文件
+        if not (ui_tab) or ui_type ~= 'directory' then
+            love.filesystem.createDirectory("ui")
+        end
         
 
         if chart_tab[select_music_pos] then
@@ -391,7 +394,8 @@ room_select = {
             return
         
 
-        elseif string.find(flie_name,".jpg") or string.find(flie_name,".png") or string.find(flie_name,".txt") then --bg/谱面文件
+        elseif string.find(flie_name,".jpg") or string.find(flie_name,".jpeg") or 
+        string.find(flie_name,".png") or string.find(flie_name,".txt") then --bg/谱面文件
             love.filesystem.newFile("chart/"..chart_tab[select_music_pos].."/"..flie_name,"w") --复制到当前文件夹下
             love.filesystem.write("chart/"..chart_tab[select_music_pos].."/"..flie_name,
             file:read()) --复制到新的文件夹

@@ -1,5 +1,5 @@
 displayed_content = "nil" --显示的内容
-local pos  = "edit"
+local pos  = {"edit",'tracks_edit'}
 --侧边栏
 function room_type(type) -- 房间状态判定
     return type == displayed_content
@@ -9,6 +9,7 @@ room_sidebar = {
         objact_button_chart_info.load(1250,100,0,150,50)
         objact_button_settings.load(1250,200,0,150,50)
         objact_button_togithub.load(1250,300,0,150,50)
+        objact_events_edit.load(1250,300,0,150,50)
         objact_button_break.load(1200,40,0,30,30)
         
     end,
@@ -30,6 +31,8 @@ room_sidebar = {
         objact_chart_info.draw()
         objact_settings.draw()
         objact_event_edit.draw()
+        objact_note_edit.draw()
+        objact_events_edit.draw()
         objact_button_togithub.draw()
         if  not room_type("nil") then  --退出
             objact_button_break.draw()
@@ -38,6 +41,8 @@ room_sidebar = {
         love.graphics.print(objact_language.get_string_in_languages(displayed_content),1250,50)
         love.graphics.setColor(1,1,1,1)
         love.graphics.print(objact_language.get_string_in_languages("version")..version,1200,780)
+        local fps = love.timer.getFPS( )
+        love.graphics.print("FPS:"..fps,1200,760)
     end,
     keypressed = function(key)
         if not the_room_pos(pos) then

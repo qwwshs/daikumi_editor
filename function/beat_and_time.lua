@@ -149,3 +149,14 @@ function beat_sub(beat1,beat2) --beat相减
     local new_numor,new_denom = addFractions(local_beat1[2],local_beat1[3],-local_beat2[2],local_beat2[3])
     return {local_beat1[1] - local_beat2[1],new_numor,new_denom}
 end
+
+function to_nearby_Beat(beat) --取最近的beat
+    local istempbeat = beat
+    local istemp_min_beat = 1 --假设1最近
+    for i = 1, denom.denom do --取分度 哪个近取哪个
+        if math.abs(istempbeat - (math.floor(istempbeat) + i / denom.denom)) < math.abs(istempbeat - (math.floor(istempbeat) + istemp_min_beat / denom.denom)) then
+            istemp_min_beat = i
+        end
+    end
+    return {math.floor(istempbeat),istemp_min_beat,denom.denom}
+end

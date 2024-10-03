@@ -37,4 +37,16 @@ objact_note = {
             objact_message_box.message("note delete")
         end
     end,
+    mousepressed = function(x,y,button)
+        if  mouse.x >= 900 and mouse.x <= 1000 then -- 选择note
+            local pos = note_click(mouse.y)
+            if pos then
+                displayed_content = 'note'..pos
+                objact_note_edit.load(1200,40,0,30,30) --调用编辑界面
+            else
+                displayed_content = 'nil'
+            end
+            objact_message_box.message("note click")
+        end
+    end
 }
