@@ -49,6 +49,11 @@
        按下a＋b并且框选内容在演示区域 粘贴note和反向粘贴框选的事件  
        按下z    撤回上一步对note的操作
        按下y    重做上一步对note的操作  
+       按下n    将当前复制的内容粘贴到新轨道 并且将粘贴到该轨道的event中的x偏移到鼠标所在位置  
+需要配合alt的事件（以下事件的触发前提都为框选完毕并且按住了alt）  
+       按下c    切割鼠标左键单点选择的事件  
+鼠标右键  
+       点击事件 note均会将该事件 note加入复制表
   ##**相关**  
   [LxgwNeoXiHei](https://github.com/lxgw/LxgwNeoXiHei)  
   [love2d](https://github.com/love2d/love)  
