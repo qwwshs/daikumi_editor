@@ -11,7 +11,7 @@ local ui_break = love.graphics.newImage("asset/ui_break.png")
 local chart_info_pos_y = 0 --位移
 local setting_type ={}
 local function will_draw()
-    return room_type(type) and the_room_pos("edit")
+    return room_type(type) and the_room_pos({"edit",'tracks_edit'})
 end
 objact_settings = {
     load = function(x1,y1,r1,w1,h1)

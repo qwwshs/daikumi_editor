@@ -1,4 +1,4 @@
-version = "0.1.9"
+version = "0.2.0"
 beat = {nowbeat = 0,allbeat = 100}
 time = {nowtime = 0 ,alltime = 100}
 denom = {scale = 1,denom = 4} --分度的缩放和使用的分度
@@ -158,6 +158,8 @@ function love.load()
     room_sidebar.load()
     room_select.load()
     objact_mouse.load()
+    room_edit_tool.load()
+    room_tracks_edit.load()
     log("start")
     objact_message_box.message("start")
     love.keyboard.setKeyRepeat(true) --键重复
@@ -179,19 +181,23 @@ function love.update(dt)
     mouse.y = mouse.original_y / window_h_scale
     elapsed_time = elapsed_time + dt
     animation_update(dt)
-    
+    room_tracks_edit.update(dt)
     room_play.update(dt)
     room_sidebar.update(dt)
     room_select.update(dt)
+    room_edit_tool.update(dt)
     objact_message_box.update(dt)
+
 end
 function love.draw()
     love.graphics.scale(window_w_scale,window_h_scale)
     objact_demo_mode.draw()
     room_play.draw()
+    room_tracks_edit.draw()
     room_sidebar.draw()
     objact_message_box.draw()
     room_select.draw()
+    room_edit_tool.draw()
     input_box_draw_all()
     switch_draw_all()
     button_draw_all()
@@ -213,8 +219,11 @@ function love.keypressed(key)
     if string.sub(key,1,2) == "kp" then
         key = string.sub(key,3,3)
     end
+
     room_play.keypressed(key)
+    room_tracks_edit.keypressed(key)
     room_sidebar.keypressed(key)
+    room_edit_tool.keypressed(key)
     objact_message_box.message(key)
     input_box_key(key) --所有键入内容都照样读的 直接塞主函数
     objact_demo_mode.keyboard(key)
@@ -232,12 +241,16 @@ function love.keyreleased(key)
     end
     iskeyboard[key] = false
     room_play.keyreleased(key)
+    room_tracks_edit.keyreleased(key)
 end
+
 function love.wheelmoved(x, y)
     if message_window == true then
         return
     end
     room_play.wheelmoved(x,y)
+    room_edit_tool.wheelmoved(x,y)
+    room_tracks_edit.wheelmoved(x,y)
     room_sidebar.wheelmoved(x,y)
     room_select.wheelmoved(x,y)
 
@@ -252,9 +265,13 @@ function love.mousepressed( x, y, button, istouch, presses )
         return
     end
     room_play.mousepressed( x, y, button, istouch, presses )
+    room_tracks_edit.mousepressed( x, y, button, istouch, presses )
     room_sidebar.mousepressed( x, y, button, istouch, presses )
-    objact_mouse.mousepressed( x, y, button, istouch, presses )
+    room_edit_tool.mousepressed( x, y, button, istouch, presses )
     room_select.mousepressed( x, y, button, istouch, presses )
+
+    objact_mouse.mousepressed( x, y, button, istouch, presses )
+    
 
 end
 
@@ -268,7 +285,10 @@ function love.mousereleased( x, y, button, istouch, presses )
     objact_mouse.mousereleased( x, y, button, istouch, presses )
     room_sidebar.mousereleased( x, y, button, istouch, presses )
     room_play.mousereleased(x, y, button, istouch, presses)
+    room_tracks_edit.mousereleased( x, y, button, istouch, presses )
     room_select.mousereleased( x, y, button, istouch, presses )
+    room_edit_tool.mousereleased( x, y, button, istouch, presses )
+    
     input_box_mousepressed(x, y)
     button_mousepressed(x,y)
     switch_mousepressed(x,y)
@@ -278,14 +298,14 @@ function love.textinput(input)
     if message_window == true then
         return
     end
-    room_play.textinput(input)
+
     input_box_textinput(input)
 end
 function love.quit()
     if message_window == true then
         return true
     end
-    local quit = room_play.quit()
+    local quit = room_edit_tool.quit()
     return quit
 end
 

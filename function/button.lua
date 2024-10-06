@@ -30,7 +30,7 @@ function button_draw(name)
     else
         local style_width, style_height = button_objact[name].style:getDimensions( ) -- 得到宽高
         local style_scale_h = 1 / style_height * button_objact[name].h
-        local style_scale_w = 1 / style_height * button_objact[name].w
+        local style_scale_w = 1 / style_width * button_objact[name].w
         love.graphics.draw(button_objact[name].style,button_objact[name].x,button_objact[name].y,0,style_scale_w,style_scale_h)
     end
     local pos = button_query_type_in()
@@ -42,7 +42,7 @@ function button_draw(name)
                 love.graphics.setColor(1,1,1,1)
                 local style_width, style_height = button_objact[name].style:getDimensions( ) -- 得到宽高
                 local style_scale_h = 1 / style_height * button_objact[name].h
-                local style_scale_w = 1 / style_height * button_objact[name].w
+                local style_scale_w = 1 / style_width * button_objact[name].w
                 love.graphics.draw(button_objact[name].type.style2,button_objact[name].x,button_objact[name].y,0,style_scale_w,style_scale_h)
             end
         else
@@ -64,6 +64,8 @@ function button_mousepressed(x,y) --输入
         if x >= button_objact[i].x and x <= button_objact[i].x + button_objact[i].w 
         and y <= button_objact[i].y + button_objact[i].h and y >= button_objact[i].y and button_objact[i].type.will_draw() then
             button_objact[i].func()
+            button_objact[i].type.input_ed_finish()
+            break
         end
     end
 end

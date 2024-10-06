@@ -5,6 +5,12 @@ local w = 0
 local h = 0
 local r = 0
 local ui_break = love.graphics.newImage("asset/ui_break.png")
+local function will_draw()
+    return (not room_type("nil")) and the_room_pos({"edit",'tracks_edit'})
+end
+local function break_sidebar()
+    displayed_content = "nil" --回到主界面
+end
 objact_button_break = {
     load = function(x1,y1,r1,w1,h1)
         x= x1 --初始化
@@ -12,24 +18,17 @@ objact_button_break = {
         w = w1
         h = h1
         r = r1
+        button_new("break_sidebar",break_sidebar,x,y,w,h,ui_break,{will_draw = will_draw,style2 = ui_break})
     end,
     draw = function()
-        local _width, _height = ui_break:getDimensions( ) -- 得到宽高
-        local _scale_w = 1 / _width * w
-        local _scale_h = 1 / _height * h
-        love.graphics.setColor(1,1,1,1)
-
-        love.graphics.draw(ui_break,x,y,r,_scale_w,_scale_h)
     end,
     keyboard = function(key)
         if key == "escape" then
-            displayed_content = "nil" --回到主界面
-            
+            break_sidebar() --回到主界面
+
         end
     end,
     mousepressed = function( x1, y1, button, istouch, presses )
-        if x1 >= x  and x1 <= x + w and y1 <= y + h and y1 >= y then -- 在退出的范围内
-            objact_button_break.keyboard("escape")
-        end
+
     end,
 }

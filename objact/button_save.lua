@@ -54,7 +54,13 @@ end
 
 -- 创建协程  
 local the_coroutine_save= coroutine.create(coroutine_save)
-
+local function will_draw()
+    return the_room_pos({"edit",'tracks_edit'})
+end
+local function do_save()
+    quit_click = quit_click + 1
+    objact_message_box.message("save")
+end
 objact_save = { --分度改变用的
     load = function(x1,y1,r1,w1,h1)
         x= x1 --初始化
@@ -62,35 +68,23 @@ objact_save = { --分度改变用的
         w = w1
         h = h1
         r = r1
+        button_new("save",do_save,x,y,w,h,ui_save,{will_draw = will_draw})
     end,
     draw = function()
-        local _width, _height = ui_save:getDimensions( ) -- 得到宽高
-        local _scale_w = 1 / _width * w
-        local _scale_h = 1 / _height * h
-        love.graphics.setColor(1,1,1,1)
-
-        love.graphics.draw(ui_save,x,y,r,_scale_w,_scale_h)
     end,
     keyboard = function(key)
         if key == "s" and isctrl == true  then
-            -- 读取文本文件 内容相同直接退出
-            will_save = will_save + 1
-            objact_message_box.message("save")
+            do_save()
         end
     end,
 
     mousepressed = function( x1, y1, button, istouch, presses )
-        if x1 >= x  and x1 <= x + w and y1 <= y + h and y1 >= y then -- 在play的范围内
-            -- 读取文本文件 内容相同直接退出
-            will_save = will_save + 1
-            objact_message_box.message("save")
-        end
     end,
 
     update = function(dt)
         if elapsed_time - save_time >= 114 and demo_mode == false and settings.auto_save == 1 then --保存
             save_time = elapsed_time
-            will_save = will_save + 1
+            do_save()
             objact_message_box.message("auto_save")
         end
         local msg = love.thread.getChannel( 'save completed' ):pop()  --得到

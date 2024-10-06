@@ -5,7 +5,19 @@ local w = 0
 local h = 0
 local r = 0
 local type = "nil"
-
+local function will_draw()
+    return room_type(type) and the_room_pos({"edit",'tracks_edit'})
+end
+local function draw_this_button()
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.rectangle("line",x,y,w,h)
+    love.graphics.print(objact_language.get_string_in_languages("info"),x + 10,y)
+end
+local function will_do()
+    objact_message_box.message("info")
+    displayed_content = "info"
+    objact_chart_info.load(1250,100,0,150,50)
+end
 objact_button_chart_info = {
     load = function(x1,y1,r1,w1,h1)
         x= x1 --初始化
@@ -13,23 +25,12 @@ objact_button_chart_info = {
         w = w1
         h = h1
         r = r1
+        button_new("chart_info",will_do,x,y,w,h,draw_this_button,{will_draw = will_draw})
     end,
     draw = function()
-        if not room_type(type) then
-            return
-        end
-        love.graphics.setColor(1,1,1,1)
-        love.graphics.rectangle("line",x,y,w,h)
-        love.graphics.print(objact_language.get_string_in_languages("info"),x + 10,y)
+
     end,
     mousepressed = function( x1, y1, button, istouch, presses )
-        if not room_type(type) then
-            return
-        end
-        if x1 >= x and x1 <= x + w and y1 <= y + h and y1 >= y and room_type(type) then -- 在范围内
-            objact_message_box.message("info")
-            displayed_content = "info"
-            objact_chart_info.load(1250,100,0,150,50)
-        end
+
     end,
 }

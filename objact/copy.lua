@@ -35,19 +35,63 @@ function get_copy()
 end
 
 objact_copy = {
-    draw = function()
+    draw = function(posx) --偏移值
+        posx = posx or 900
         local note_h = settings.note_height --25 * denom.scale
         local note_w = 75 
         if love.mouse.isDown(1) then --复制框
             love.graphics.setColor(0,1,1,0.4)
-            love.graphics.rectangle("fill",mouse_start_pos.x,mouse_start_pos.y,mouse.x - mouse_start_pos.x,mouse.y - mouse_start_pos.y)
+            love.graphics.rectangle("fill",mouse_start_pos.x - 900 + posx,mouse_start_pos.y,mouse.x - mouse_start_pos.x ,mouse.y - mouse_start_pos.y)
             love.graphics.setColor(0,1,1,1)
-            love.graphics.rectangle("line",mouse_start_pos.x,mouse_start_pos.y,mouse.x - mouse_start_pos.x,mouse.y - mouse_start_pos.y)
+            love.graphics.rectangle("line",mouse_start_pos.x -  900 + posx,mouse_start_pos.y,mouse.x - mouse_start_pos.x,mouse.y - mouse_start_pos.y)
         end
         if copy_tab.type ~= "x" then
             love.graphics.setColor(0,1,1,0.5)
         else
             love.graphics.setColor(1,1,1,0.5)
+        end
+        if room_pos == 'tracks_edit' then
+            for i=1,#copy_tab.note do
+                local pos = {} --默认不显示
+                for k = 1,#tracks_table do
+                    if tracks_table[k] ==copy_tab.note[i].track then
+                        pos[#pos + 1] =  20+(k-1 + tracks_edit_x_move)*300
+                    end
+                end
+                local y = beat_to_y(copy_tab.note[i].beat)
+                local y2 = y - note_h
+                if copy_tab.note[i].type == "hold" then
+                    y2 = beat_to_y(copy_tab.note[i].beat2)
+                end
+                    if y > 0 - note_h  and y2 < 800 + note_h then
+                        for k = 1,#pos do
+                            love.graphics.rectangle("fill",pos[k],y2,75,y - y2)
+                        end
+                    end
+
+            end
+
+            for i=1,#copy_tab.event do
+                local pos = {} --默认不显示
+                for k = 1,#tracks_table do
+                    if tracks_table[k] ==copy_tab.event[i].track then
+                        pos[#pos + 1] =  20+(k-1 + tracks_edit_x_move)*300
+                    end
+                end
+                local y = beat_to_y(copy_tab.event[i].beat)
+                local y2 = beat_to_y(copy_tab.event[i].beat2)
+                local x_pos = 100
+                if copy_tab.event[i].type == "w" then
+                    x_pos = 200
+                end
+                    if y > 0 - note_h  and y2 < 800 + note_h then
+                        for k = 1,#pos do
+                            love.graphics.rectangle("fill",pos[k] + x_pos,y2,75,y - y2)
+                        end
+                    end
+            end
+
+            return
         end
             --对所选标记   
             for i=1,#copy_tab.note do
@@ -60,7 +104,7 @@ objact_copy = {
 
                 if copy_tab.note[i].track == track.track then
                     if y > 0 - note_h  and y2 < 800 + note_h then
-                        love.graphics.rectangle("fill",900,y2,75,y - y2)
+                        love.graphics.rectangle("fill",posx,y2,75,y - y2)
                     end
                 end
 
@@ -85,7 +129,6 @@ objact_copy = {
                     --图像范围限制函数
                 local function myStencilFunction()
                     love.graphics.polygon("fill",x-450,settings.judge_line_y-y,x-450+w,settings.judge_line_y-y,0,note_occurrence_point*math.tan(math.rad(settings.angle))-y)
-                    --love.graphics.rectangle("fill",-1000,-1000,2000,2000)
                 end
                 --使图片倾斜
                 local note_angle = math.acos( (x-450) / (settings.judge_line_y-note_occurrence_point *math.tan(math.rad(settings.angle)) ))
@@ -126,9 +169,9 @@ objact_copy = {
 
             local y = beat_to_y(copy_tab.event[i].beat)
             local y2 = beat_to_y(copy_tab.event[i].beat2)
-            local x_pos = 1000
+            local x_pos = posx + 100
             if copy_tab.event[i].type == "w" then
-                x_pos = 1100
+                x_pos = posx + 200
             end
 
             if copy_tab.event[i].track == track.track then
@@ -144,19 +187,19 @@ objact_copy = {
     end,
     mousepressed = function(x,y,button)
         if love.mouse.isDown(2) then --单选
-            if x > 1000 and x <= 1100 then
+            if x > 900 + 100 and x <= 900 + 200 then
                 if copy_exist(chart.event[event_click("x",mouse.y)],"event") then --存在就取消勾选
                     copy_sub(chart.event[event_click("x",mouse.y)],"event")
                 else
                     copy_add(chart.event[event_click("x",mouse.y)],"event")
                 end
-            elseif x > 1100 and x <= 1200 then
+            elseif x > 900 + 200 and x <= 1200 then
                 if copy_exist(chart.event[event_click("w",mouse.y)],"event") then --存在就取消勾选
                     copy_sub(chart.event[event_click("w",mouse.y)],"event")
                 else
                     copy_add(chart.event[event_click("w",mouse.y)],"event")
                 end
-            elseif x <= 1000 then
+            elseif x <= 900 + 100 then
                 if copy_exist(chart.note[note_click(mouse.y)],"note") then --存在就取消勾选
                     copy_sub(chart.note[note_click(mouse.y)],"note")
                 else
@@ -231,7 +274,7 @@ objact_copy = {
             return 
         end
         
-        if not (max_x < 900 or 1000 < min_x) then --在note轨道
+        if not (max_x < 900 or 900 + 100 < min_x) then --在note轨道
             for i = 1,#chart.note do
                 local isbeat = thebeat(chart.note[i].beat)
                 local isbeat2 = isbeat
@@ -250,12 +293,12 @@ objact_copy = {
 
         end
 
-        if not (max_x < 1000 or 1200 < min_x) then --在event轨道
+        if not (max_x < 900 + 100 or 1200 < min_x) then --在event轨道
             for i = 1,#chart.event do
-                local event_x_min = 1000
-                local event_x_max = 1100
+                local event_x_min = 900 + 100
+                local event_x_max = 900 + 200
                 if chart.event[i].type == "w" then
-                    event_x_min = 1100
+                    event_x_min = 900 + 200
                     event_x_max = 1200
                 end
                 if not (max_x < event_x_min or event_x_max < min_x) then

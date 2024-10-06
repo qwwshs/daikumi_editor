@@ -12,7 +12,7 @@ events_edit_trans_expression = '' --过渡类型的表达式
 local expression = function(x) return x end --表达式
 
 local function will_draw()
-    return room_type(pos) and the_room_pos("edit")
+    return room_type(pos) and the_room_pos({"edit",'tracks_edit'})
 end
 local function easings_input_ed_finish() --开关输入完成后的回调 写出表达式
     local temp_string = ''

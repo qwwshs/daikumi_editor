@@ -1,19 +1,6 @@
-local x = 0
-local y = 0
-local r = 0
-local w = 0
-local h = 0
-local ui_note = love.graphics.newImage("asset/ui_note.png")
-local ui_wipe = love.graphics.newImage("asset/ui_wipe.png")
-local ui_hold = love.graphics.newImage("asset/ui_hold.png")
-local ui_delete = love.graphics.newImage("asset/ui_delete.png")
+
 objact_note = {
     load = function(x1,y1,r1,w1,h1)
-        x= x1 --初始化
-        y = y1
-        w = w1
-        h = h1
-        r = r1
     end,
     draw = function()
 

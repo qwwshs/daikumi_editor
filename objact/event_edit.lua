@@ -4,7 +4,7 @@ local r = 0
 local w = 0
 local h = 0
 local function will_draw()
-    return string.sub(displayed_content,1,5) == "event" and the_room_pos("edit")
+    return string.sub(displayed_content,1,5) == "event" and the_room_pos({"edit",'tracks_edit'})
 end
 objact_event_edit = {  --编辑界面
     load = function(x1,y1,r1,w1,h1)

@@ -9,9 +9,14 @@ local ui_up = love.graphics.newImage("asset/ui_up.png")
 local ui_down = love.graphics.newImage("asset/ui_down.png")
 
 local function will_draw()
-    return the_room_pos("edit")
+    return the_room_pos({"edit",'tracks_edit'})
 end
-
+local function do_up()
+    denom.denom = denom.denom + 1
+end
+local function do_down()
+    denom.denom = math.abs(denom.denom - 2) + 1--防止非自然数
+end
 objact_denom = { --分度改变用的
     load = function(x1,y1,r1,w1,h1)
         x= x1 --初始化
@@ -20,35 +25,59 @@ objact_denom = { --分度改变用的
         h = h1
         r = r1
         input_box_new("denom","denom.denom",x-50,y + h,50,h,{type = "number",will_draw = will_draw})
+        button_new("denom_up",do_up,x,y,w,h,ui_up,{will_draw = will_draw})
+        button_new("denom_down",do_down,x,y+h,w,h,ui_down,{will_draw = will_draw})
     end,
     draw = function()
-        local _width, _height = ui_up:getDimensions( ) -- 得到宽高
-        local _scale_w = 1 / _width * w
-        local _scale_h = 1 / _height * h
-        love.graphics.setColor(1,1,1,1)
 
-        love.graphics.draw(ui_up,x,y,r,_scale_w,_scale_h)
-        love.graphics.draw(ui_down,x,y+h,r,_scale_w,_scale_h)
         love.graphics.print(objact_language.get_string_in_languages("denom"),x-50,y)
 
     end,
     keyboard = function(key)
         if key == "up" then
-            denom.denom = denom.denom + 1
+            do_up()
         elseif key == "down" then
-            denom.denom = math.abs(denom.denom - 2) + 1--防止非自然数
+            do_down()
         end
 
     end,
     mousepressed = function( x1, y1, button, istouch, presses )
-        
-        if x1 >= x  and x1 <= x + w and y1 <= y + h and y1 >= y then -- 在up的范围内
-            objact_denom.keyboard("up")
-            
-        elseif x1 >= x  and x1 <= x + w and y1 <= y + h + h and y1 >= y + h then -- 在down的范围内
-            objact_denom.keyboard("down")
-            
+
+    end,
+    wheelmoved = function(x,y)
+        if mouse.x > 1200 then  --限制范围
+            return
         end
+        --beat更改
+            local temp = settings.contact_roller--临时数值
+    
+            music_play = false
+    
+            if y > 0 then
+                temp = settings.contact_roller/ denom.denom
+            else
+                temp = -settings.contact_roller/ denom.denom
+            end
+    
+            beat.nowbeat = beat.nowbeat +temp
+            if beat.nowbeat < 0 then
+                beat.nowbeat = 0
+            end
+            if beat.nowbeat >= beat.allbeat then
+                beat.nowbeat = beat.allbeat
+            end
+    
+            local min_denom = 0 --假设0最近
+            for i = 1, denom.denom do --取分度 哪个近取哪个
+                if math.abs(beat.nowbeat - (math.floor(beat.nowbeat) + i / denom.denom)) < math.abs(beat.nowbeat - (math.floor(beat.nowbeat) + min_denom / denom.denom)) then
+                    min_denom = i
+                end
+            end
+            beat.nowbeat = math.floor(beat.nowbeat) + min_denom / denom.denom --更正位置
+    
+            time.nowtime = beat_to_time(chart.bpm_list,beat.nowbeat)
+    
+            local y_beat = temp
     end,
     textinput = function(input)
 
