@@ -64,13 +64,13 @@ dakumi_editor是由qwws所制作的tamumi3的饭制谱面编辑器！
 
 |按钮|功能|对应的快捷键|图标|
 |----|----|----|----|
-|play/pause|播放当前谱面/停止播放|空格键|![play](ui/ui_play.png)![stop](ui/ui_pause.png)|
-|save|保存|ctrl+s|![save](ui/ui_save.png)|
-|denom|改变节拍细分|up/down键|![up](ui/ui_up.png)![down](ui/ui_down.png)|
-|track|改变当前轨道|right/left键|![up](ui/ui_up.png)![down](ui/ui_down.png)|
-|scale|改变当前轨道缩放|无|![up](ui/ui_up.png)![down](ui/ui_down.png)|
-|fence|改变当前play区域栅栏数|无|![up](ui/ui_up.png)![down](ui/ui_down.png)|
-|music_speed|改变当前播放速度|无|![up](ui/ui_up.png)![down](ui/ui_down.png)|
+|play/pause|播放当前谱面/停止播放|空格键|![play](asset/ui_play.png)![stop](asset/ui_pause.png)|
+|save|保存|ctrl+s|![save](asset/ui_save.png)|
+|denom|改变节拍细分|up/down键|![up](asset/ui_up.png)![down](asset/ui_down.png)|
+|track|改变当前轨道|right/left键|![up](asset/ui_up.png)![down](asset/ui_down.png)|
+|scale|改变当前轨道缩放|无|![up](asset/ui_up.png)![down](asset/ui_down.png)|
+|fence|改变当前play区域栅栏数|无|![up](asset/ui_up.png)![down](asset/ui_down.png)|
+|music_speed|改变当前播放速度|无|![up](asset/ui_up.png)![down](asset/ui_down.png)|
 
 ### edit区域
 
