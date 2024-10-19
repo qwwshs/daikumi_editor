@@ -37,6 +37,7 @@ function note_delete(pos)
         or (thebeat(chart.note[i].beat) <= note_beat_up and thebeat(chart.note[i].beat2) >= note_beat_up))) then
             objact_redo.write_revoke("note delete",chart.note[i])
             table.remove(chart.note, i)
+            displayed_content = 'nil'
             return
         end
     end

@@ -15,7 +15,6 @@ save_thread:start() --启动
 
 local function coroutine_save()
     --一个个传 避免爆炸
-    coroutine.yield()  -- 暂停协程，允许其他操作执行
     love.thread.getChannel( 'save' ):push({"start",chart_info.chart_name[select_chart_pos].path}) -- 发送数据到线程
     local the_table_to_str = ""
     local frequency = 0
@@ -58,7 +57,7 @@ local function will_draw()
     return the_room_pos({"edit",'tracks_edit'})
 end
 local function do_save()
-    quit_click = quit_click + 1
+    will_save = will_save + 1
     objact_message_box.message("save")
 end
 objact_save = { --分度改变用的

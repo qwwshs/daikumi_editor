@@ -40,7 +40,7 @@ objact_chart_info = {
             input_box_new("chart","chart.info.chart_name",x,y+40 + chart_info_pos_y,w,20,{type ="string",will_draw = will_draw})
             input_box_new("music","chart.info.song_name",x,y+80 + chart_info_pos_y,w,20,{type ="string",will_draw = will_draw})
 
-            input_box_new("offset","chart.offset",x,y+120,w,20 + chart_info_pos_y,"number",{type ="number",will_draw = will_draw})
+            input_box_new("chart_offset","chart.offset",x,y+120,w,20 + chart_info_pos_y,{type ="number",will_draw = will_draw})
             objact_chart_info.bpm_list_load()
         end
 
@@ -89,7 +89,7 @@ objact_chart_info = {
         input_box_wheelmoved(x,y,"artist")
         input_box_wheelmoved(x,y,"chart")
         input_box_wheelmoved(x,y,"music")
-        input_box_wheelmoved(x,y,"offset")
+        input_box_wheelmoved(x,y,"chart_offset")
         chart_info_pos_y = chart_info_pos_y + y * 10
         objact_bpm_list.wheelmoved(x,y)
     end
