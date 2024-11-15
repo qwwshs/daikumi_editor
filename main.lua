@@ -1,4 +1,4 @@
-version = "0.2.0"
+version = "0.3.0"
 beat = {nowbeat = 0,allbeat = 100}
 time = {nowtime = 0 ,alltime = 100}
 denom = {scale = 1,denom = 4} --分度的缩放和使用的分度
@@ -45,12 +45,10 @@ meta_settings = { --设置基本格式 元表
         judge_line_y = 700,
         angle = 90,
         music_volume = 100,
-        audio_picture = 0,
         mouse = 0,
         hit_volume = 100,
         hit = 0,
         hit_sound = 0,
-        vsync= 0,
         language= 1,
         contact_roller = 1, --鼠标滚动系数
         note_alpha = 100,
@@ -120,7 +118,6 @@ function love.load()
     setmetatable(settings,meta_settings) --防谱报废
     
     fillMissingElements(settings,meta_settings.__index)
-    love.window.setVSync( settings.vsync  )
     love.resize( settings.window_width, settings.window_height )  --缩放窗口
     love.window.setMode(settings.window_width, settings.window_height, {resizable = true})  
 
@@ -195,12 +192,12 @@ function love.draw()
     room_play.draw()
     room_tracks_edit.draw()
     room_sidebar.draw()
-    objact_message_box.draw()
     room_select.draw()
     room_edit_tool.draw()
     input_box_draw_all()
     switch_draw_all()
     button_draw_all()
+    objact_message_box.draw()
     objact_mouse.draw()
 
 end
@@ -323,8 +320,10 @@ end
 function love.filedropped( file ) --文件拖入
     room_select.filedropped( file ) --文件拖入
 end
-
 -- 错误处理
+
+
+
 
 
 local function error_printer(msg, layer)
@@ -332,7 +331,8 @@ local function error_printer(msg, layer)
 end
 
 function love.errorhandler(msg)
-    save(chart,"chart.txt")
+    save(chart,"chart.d3")
+    love.system.openURL(love.filesystem.getRealDirectory( "chart" ))
 	msg = tostring(msg)
     log("error:"..msg)
 	error_printer(msg, 2)
