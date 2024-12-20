@@ -10,7 +10,6 @@ path = ''
 animation_new("select_music_pos_x",1080,1080,0,0,{1,1,1,1})
 animation.select_bg_alpha = 0.3
 
-local mask_canvas = love.graphics.newCanvas(1600,800)
 local function select_music()
     if chart_tab[select_music_pos] then
         chart_info = {song_name = nil,bg = nil,chart_name = {},song = nil} --谱面的信息
@@ -95,35 +94,11 @@ end
 room_select = {
     load = function()
 
-        -- 设置Canvas为当前绘图目标
-        love.graphics.setCanvas(mask_canvas)
-
-        -- 在Canvas上绘制一些内容
-        love.graphics.clear() -- 清空
-        love.graphics.setFont(font_plus)
-        love.graphics.setColor(0.6,0.6,0.6,0.3)
-        love.graphics.rectangle("fill",0,0,1600,800) --背景板
-        love.graphics.setColor(1,1,1,1)
-        love.graphics.print(
-        objact_language.get_string_in_languages('You can drag the chart or folder containing the chart or song to the window for import.')
-        ,0,720)
-        --上下两边的边框
-        love.graphics.setColor(0,1,1,1)
-        love.graphics.circle('fill',750,780,30,4)
-        love.graphics.circle('fill',850,20,30,4)
-        love.graphics.setColor(0,0,0,1)
-        love.graphics.rectangle("fill",850,0,750,50)
-        love.graphics.rectangle("fill",0,750,750,50)    
-        love.graphics.circle('fill',750,775,25,4)
-        love.graphics.circle('fill',850,25,25,4)    
-        -- 重置绘图目标为默认（屏幕）
-        love.graphics.setCanvas()
-
-
             objact_edit_chart.load(0,750,0,100,50)
             objact_delete_chart.load(100,750,0,100,50)
             objact_new_chart.load(200,750,0,100,50)
-            objact_open_chart_list.load(1500,0,0,100,50)
+            objact_open_directory.load(1500,0,0,100,50)
+            objact_flushed.load(1200,0,0,100,50)
             --objact_select_file.load(1400,0,0,100,50)
             objact_delete_music.load(1400,0,0,100,50)
             objact_export.load(1300,0,0,100,50)
@@ -142,8 +117,8 @@ room_select = {
         --曲绘
         if chart_info.bg then
             local bg_width, bg_height = chart_info.bg:getDimensions( ) -- 得到宽高
-            local bg_scale_h = 1 / bg_height * 1600 
-            local bg_scale_w = 1 / bg_height * 1600 / (window_w_scale / window_h_scale)
+            local bg_scale_h = 1 / bg_width * 1600 
+            local bg_scale_w = 1 / bg_width * 1600 / (window_w_scale / window_h_scale)
             love.graphics.draw(chart_info.bg,0,0,0,bg_scale_w,bg_scale_h)
         end
         
@@ -193,14 +168,21 @@ room_select = {
         end
 
 
-        love.graphics.draw(mask_canvas, 0, 0)
+        love.graphics.setFont(font_plus)
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.print(
+        objact_language.get_string_in_languages('You can drag the chart or folder containing the chart or song to the window for import.')
+        ,0,720)
+        --上下两边的边框
+        love.graphics.setColor(0,1,1,1)
+        love.graphics.circle('fill',750,780,30,4)
+        love.graphics.circle('fill',850,20,30,4)
+        love.graphics.setColor(0,0,0,1)
+        love.graphics.rectangle("fill",850,0,750,50)
+        love.graphics.rectangle("fill",0,750,750,50)    
+        love.graphics.circle('fill',750,775,25,4)
+        love.graphics.circle('fill',850,25,25,4)    
 
-        objact_delete_chart.draw()
-        objact_new_chart.draw()
-        objact_edit_chart.draw()
-        objact_export.draw()
-        objact_delete_music.draw()
-        objact_open_chart_list.draw()
         --objact_select_file.draw()
         --objact_selector.draw()
 
@@ -296,13 +278,7 @@ room_select = {
             chart = copyTable(info) --读取谱面
             setmetatable(chart,meta_chart) --防谱报废
         end
-        --objact_delete_music.mousepressed(x,y,button,istouch,presses)
-        --objact_delete_chart.mousepressed(x,y,button,istouch,presses)
-        --objact_edit_chart.mousepressed(x,y,button,istouch,presses)
-        --objact_new_chart.mousepressed(x,y,button,istouch,presses)
-        
-        objact_open_chart_list.mousepressed(x,y,button,istouch,presses)
-        objact_export.mousepressed(x,y,button,istouch,presses)
+
         --objact_select_file.mousepressed(x,y,button,istouch,presses)
 
 
@@ -400,15 +376,22 @@ room_select = {
         elseif string.find(flie_name,".ogg") or string.find(flie_name,".mp3") or string.find(flie_name,".wav") then --音频文件
             --创建新文件夹
             local path_name = flie_name --文件夹名
+            local music_type = get_music_type(file)
+
+            if music_type == "unknown" then --后缀错误
+                objact_message_box.message_window_dlsplay('Unknown audio format',function() end,function() end)
+                return
+            end
 
             path_name= string.sub(path_name,1, string.find(path_name, ".[^.]*$"))   --删除后缀
 
             while love.filesystem.getInfo("chart/"..path_name ) do --防止撞名
                 path_name = path_name.."_"
             end
+            local new_file_name = path_name.."."..music_type --防止后缀错误
             love.filesystem.createDirectory("chart/"..path_name ) --创建新的文件夹
-            love.filesystem.newFile("chart/"..path_name.."/"..flie_name,"w")
-            love.filesystem.write("chart/"..path_name.."/"..flie_name,file:read()) --复制到新的文件夹
+            love.filesystem.newFile("chart/"..path_name.."/"..new_file_name,"w")
+            love.filesystem.write("chart/"..path_name.."/"..new_file_name,file:read()) --复制到新的文件夹
             love.filesystem.newFile("chart/"..path_name.."/"..'chart.d3',"w")
             love.filesystem.write("chart/"..path_name.."/"..'chart.d3',tableToString(meta_chart.__index)) --复制到新的文件夹
         elseif string.find(flie_name,".dkz") then
