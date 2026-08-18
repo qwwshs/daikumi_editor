@@ -159,7 +159,7 @@ function ctrl:mousereleased(x, y)
     local min_y_beat = beat:yToBeat(math.max(y, self.mouse_start_pos.y))
     local max_y_beat = beat:yToBeat(math.min(y, self.mouse_start_pos.y)) --这引擎y是向下增长的 服了 beat是向上增长的 所以要取反
 
-    if not math.intersect(x,self.mouse_start_pos.x,play.layout.edit.x,play.layout.edit.x + play.layout.edit.interval*3) then                      --在play区域
+    if not math.intersect(x,self.mouse_start_pos.x,play.layout.edit.x,play.layout.edit.x + play.layout.edit.interval*5) then                      --在play区域
         self.copy_tab.pos = 'play'
         --先for循环记录此刻在游玩区域的轨道
         local local_track = {}     --记录表
@@ -219,7 +219,7 @@ function ctrl:mousereleased(x, y)
         end
     end
 
-    if math.intersect(x,self.mouse_start_pos.x,play.layout.edit.x + play.layout.edit.interval,play.layout.edit.x + play.layout.edit.interval * 3) then --在event轨道
+    if math.intersect(x,self.mouse_start_pos.x,play.layout.edit.x + play.layout.edit.interval,play.layout.edit.x + play.layout.edit.interval * 5) then --在event轨道
         for i = 1, #chart.event do
             local event_x_min,event_x_max = trackSequence:getRange(chart.event[i].type)
             if math.intersect(x,self.mouse_start_pos.x,event_x_min,event_x_max) then
