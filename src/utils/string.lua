@@ -2,6 +2,76 @@
 function tableToString(tbl, indent,isrecursion) -- 表转字符串
     return serpent.block(tbl)
 end
+
+-- Nuklear's text widgets expect well-formed UTF-8.  Chart metadata can come
+-- from externally authored JSON (or a clipboard), so never pass arbitrary
+-- byte strings to the native widget.  Invalid bytes and embedded NULs are
+-- replaced with an ASCII placeholder; valid characters are kept unchanged.
+function sanitizeUtf8(value, maxBytes)
+    if value == nil then
+        return ''
+    end
+    if type(value) ~= 'string' then
+        value = tostring(value)
+    end
+
+    maxBytes = math.max(0, math.floor(tonumber(maxBytes) or (1024 * 1024 - 1)))
+    local result = {}
+    local used = 0
+    local index = 1
+    local length = #value
+
+    while index <= length do
+        local first = value:byte(index)
+        local charLength = 1
+        local valid = first ~= 0
+
+        if first >= 0x80 then
+            if first >= 0xC2 and first <= 0xDF then
+                charLength = 2
+            elseif first >= 0xE0 and first <= 0xEF then
+                charLength = 3
+            elseif first >= 0xF0 and first <= 0xF4 then
+                charLength = 4
+            else
+                valid = false
+            end
+
+            if valid and index + charLength - 1 <= length then
+                local second = value:byte(index + 1)
+                valid = second >= 0x80 and second <= 0xBF
+
+                if valid and charLength >= 3 then
+                    local third = value:byte(index + 2)
+                    valid = third >= 0x80 and third <= 0xBF
+                    valid = valid and not (first == 0xE0 and second < 0xA0)
+                    valid = valid and not (first == 0xED and second >= 0xA0)
+                end
+
+                if valid and charLength == 4 then
+                    local fourth = value:byte(index + 3)
+                    valid = fourth >= 0x80 and fourth <= 0xBF
+                    valid = valid and not (first == 0xF0 and second < 0x90)
+                    valid = valid and not (first == 0xF4 and second > 0x8F)
+                end
+            elseif charLength > 1 then
+                valid = false
+            end
+        end
+
+        local text = valid and value:sub(index, index + charLength - 1) or '?'
+        if used + #text > maxBytes then
+            break
+        end
+
+        result[#result + 1] = text
+        used = used + #text
+        index = index + (valid and charLength or 1)
+    end
+
+    return table.concat(result)
+end
+
 function isLastCharChineseOrHalfwidth(str)  
     if str == "" then return false end  
     -- 获取字符串的长度  

@@ -10,11 +10,25 @@ GchartInfo.song_name_v = {value = '0'}
 GchartInfo.offset = {value = '0'}
 GchartInfo.bpmList = {}
 
+local function editTextField(field)
+    field.value = sanitizeUtf8(field.value)
+
+    -- Do not allow invalid input from an OS clipboard or a malformed import to
+    -- bring down the editor while Nuklear's native UTF-8 editor is running.
+    local ok, event, changed = pcall(Nui.edit, Nui, 'field', field)
+    if not ok then
+        log('Skipped invalid chart-info text: ' .. sanitizeUtf8(event, 512))
+        field.value = ''
+        return nil, false
+    end
+    return event, changed
+end
+
 function GchartInfo:load()
-    self.chartor_v.value = chart.info.chartor or ''
-    self.artist_v.value = chart.info.artist or ''
-    self.chart_name_v.value = chart.info.chart_name or ''
-    self.song_name_v.value = chart.info.song_name or ''
+    self.chartor_v.value = sanitizeUtf8(chart.info.chartor)
+    self.artist_v.value = sanitizeUtf8(chart.info.artist)
+    self.chart_name_v.value = sanitizeUtf8(chart.info.chart_name)
+    self.song_name_v.value = sanitizeUtf8(chart.info.song_name)
     self.offset.value = tostring(chart.offset) or "0"
 
     for i,v in ipairs(chart.bpm_list) do
@@ -33,13 +47,13 @@ end
 function GchartInfo:Nui()
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
     Nui:label(i18n:get'chartor')
-    Nui:edit('field',self.chartor_v)
+    editTextField(self.chartor_v)
     Nui:label(i18n:get'artist')
-    Nui:edit('field',self.artist_v)
+    editTextField(self.artist_v)
     Nui:label(i18n:get'chart')
-    Nui:edit('field',self.chart_name_v)
+    editTextField(self.chart_name_v)
     Nui:label(i18n:get'music')
-    Nui:edit('field',self.song_name_v)
+    editTextField(self.song_name_v)
     Nui:label(i18n:get'offset(ms)')
     Nui:edit('field',self.offset)
 
@@ -84,10 +98,10 @@ function GchartInfo:Nui()
 
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
     if ui:tip(i18n:get('save')) then
-        chart.info.chartor = self.chartor_v.value or ""
-        chart.info.artist = self.artist_v.value or ""
-        chart.info.chart_name = self.chart_name_v.value or ""
-        chart.info.song_name = self.song_name_v.value or ""
+        chart.info.chartor = sanitizeUtf8(self.chartor_v.value)
+        chart.info.artist = sanitizeUtf8(self.artist_v.value)
+        chart.info.chart_name = sanitizeUtf8(self.chart_name_v.value)
+        chart.info.song_name = sanitizeUtf8(self.song_name_v.value)
         chart.offset = tonumber(self.offset.value) or 0
 
         if #chart.bpm_list ~= #self.bpmList then
