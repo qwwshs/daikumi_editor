@@ -1,7 +1,17 @@
+--[[
+    模块名: input
+    描述: 快捷键管理模块，处理快捷键的注册和检测
+    作者: qwwshs
+    依赖: nativefs, dkjson, meta_key, iskeyboard, table, PATH
+]]
+
 local input = {}
 setmetatable(input, input)
 
-function input:new(name, key) --创建事件
+--- 注册新的快捷键
+-- @tparam string name 快捷键名称
+-- @tparam string|table key 按键名称或按键数组
+function input:new(name, key)
     name = name or 'noname'
     local keys = {}
     if type(key) == 'string' then
@@ -12,6 +22,9 @@ function input:new(name, key) --创建事件
     self[name] = { name = name, keys = keys }
 end
 
+--- 检测快捷键是否被按下（作为 __call 元方法，可直接调用 input('name')）
+-- @tparam string name 快捷键名称
+-- @treturn boolean 是否按下
 function input:__call(name)
     if not self[name] then
         log('input')

@@ -1,4 +1,5 @@
 --chartInfo界面
+local ChartService = require("src.services.chartService")
 local GchartInfo = group:new('chart info')
 GchartInfo.type = "chart info"
 GchartInfo.layout = require('config.layouts.sidebar').chartInfo
@@ -25,13 +26,14 @@ local function editTextField(field)
 end
 
 function GchartInfo:load()
-    self.chartor_v.value = sanitizeUtf8(chart.info.chartor)
-    self.artist_v.value = sanitizeUtf8(chart.info.artist)
-    self.chart_name_v.value = sanitizeUtf8(chart.info.chart_name)
-    self.song_name_v.value = sanitizeUtf8(chart.info.song_name)
-    self.offset.value = tostring(chart.offset) or "0"
+    self.chartor_v.value = sanitizeUtf8(ChartService:getInfoField('chartor'))
+    self.artist_v.value = sanitizeUtf8(ChartService:getInfoField('artist'))
+    self.chart_name_v.value = sanitizeUtf8(ChartService:getInfoField('chart_name'))
+    self.song_name_v.value = sanitizeUtf8(ChartService:getInfoField('song_name'))
+    self.offset.value = tostring(ChartService:getOffset()) or "0"
 
-    for i,v in ipairs(chart.bpm_list) do
+    for i = 1, ChartService:getBpmCount() do
+        local v = ChartService:getBpm(i)
         self.bpmList[i] = {
             bpm = {value = tostring(v.bpm)},
             beat = {
@@ -98,28 +100,30 @@ function GchartInfo:Nui()
 
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
     if ui:tip(i18n:get('save')) then
-        chart.info.chartor = sanitizeUtf8(self.chartor_v.value)
-        chart.info.artist = sanitizeUtf8(self.artist_v.value)
-        chart.info.chart_name = sanitizeUtf8(self.chart_name_v.value)
-        chart.info.song_name = sanitizeUtf8(self.song_name_v.value)
-        chart.offset = tonumber(self.offset.value) or 0
+        ChartService:setInfoField('chartor', sanitizeUtf8(self.chartor_v.value))
+        ChartService:setInfoField('artist', sanitizeUtf8(self.artist_v.value))
+        ChartService:setInfoField('chart_name', sanitizeUtf8(self.chart_name_v.value))
+        ChartService:setInfoField('song_name', sanitizeUtf8(self.song_name_v.value))
+        ChartService:setOffset(tonumber(self.offset.value) or 0)
 
-        if #chart.bpm_list ~= #self.bpmList then
-            chart.bpm_list = {}
-        end
+        -- 组装新的 BPM 列表并整体替换（保留原有替换/就地修改的语义）
+        local new_bpm_list = {}
         for i, v in ipairs(self.bpmList) do
-            if not chart.bpm_list[i] then   chart.bpm_list[i] = {}  end
-            chart.bpm_list[i].bpm = tonumber(v.bpm.value) or 120
-            chart.bpm_list[i].beat[1] = tonumber(v.beat[1].value) or 0
-            chart.bpm_list[i].beat[2] = tonumber(v.beat[2].value) or 0
-            chart.bpm_list[i].beat[3] = tonumber(v.beat[3].value) or 1
-            if chart.bpm_list[i].bpm <= 0 then
-                chart.bpm_list[i].bpm = 120
-            end
-            chart.bpm_list[i].linear_ramp = v.linear_ramp
+            local bpm = tonumber(v.bpm.value) or 120
+            if bpm <= 0 then bpm = 120 end
+            new_bpm_list[i] = {
+                bpm = bpm,
+                beat = {
+                    tonumber(v.beat[1].value) or 0,
+                    tonumber(v.beat[2].value) or 0,
+                    tonumber(v.beat[3].value) or 1,
+                },
+                linear_ramp = v.linear_ramp,
+            }
         end
+        ChartService:setBpmList(new_bpm_list)
 
-        beat:bpmListSort()
+        ChartService:sortBpmList()
     end
 end
 

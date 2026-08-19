@@ -102,42 +102,42 @@ function Gtakana:Nui()
             table.insert(takana.components[1].children, track_component)
             local takana_note
             for i, isnote in ipairs(chart.note) do
-                if isnote.track == istrack then
+                if isnote:getTrack() == istrack then
                     takana_note = {
                         id = id,
                         model = {
-                            timeJudge = math.floor(beat:toTime(chart.bpm_list, isnote.beat) * to_ms),
+                            timeJudge = math.floor(beat:toTime(chart.bpm_list, isnote:getBeat()) * to_ms),
                             type = 'hit'
                         },
                     }
-                    local x, w = fEvent:get(isnote.track, beat:get(isnote.beat))
+                    local x, w = fEvent:get(isnote:getTrack(), isnote:getBeatValue())
 
-                    if w == 0 or isnote.fake == 1 then
+                    if w == 0 or isnote:isFakeNote() then
                         takana_note.model.properties = {}
                         takana_note.model.properties.isDummy = {
                             value = true,
                             type = 'dummyFlag'
                         }
                     end
-                    if isnote.type == 'hold' then
-                        takana_note.model.timeEnd = math.floor(beat:toTime(chart.bpm_list, isnote.beat2) * to_ms)
+                    if isnote:isHold() then
+                        takana_note.model.timeEnd = math.floor(beat:toTime(chart.bpm_list, isnote:getBeat2()) * to_ms)
                     end
-                    if isnote.type == 'note' then
+                    if isnote:isNote() then
                         takana_note.model.hitType = 'Tap'
-                    elseif isnote.type == 'wipe' then
+                    elseif isnote:isWipe() then
                         takana_note.model.hitType = 'Slide'
-                    elseif isnote.type == 'hold' then
+                    elseif isnote:isHold() then
                         takana_note.model.type = 'hold'
-                        if isnote.note_head == 1 then
+                        if isnote:getNoteHead() == 1 then
                             local hold_note = {
                                 id = id,
                                 model = {
-                                    timeJudge = math.floor(beat:toTime(chart.bpm_list, isnote.beat) * to_ms),
+                                    timeJudge = math.floor(beat:toTime(chart.bpm_list, isnote:getBeat()) * to_ms),
                                     type = 'hit',
                                     hitType = 'Tap'
                                 },
                             }
-                            if w == 0 or isnote.fake == 1 then
+                            if w == 0 or isnote:isFakeNote() then
                                 hold_note.model.properties = {}
                                 hold_note.model.properties.isDummy = {
                                     value = true,
@@ -148,16 +148,16 @@ function Gtakana:Nui()
                                 hold_note)
                             id = id + 1
                         end
-                        if isnote.wipe_head == 1 then
+                        if isnote:getWipeHead() == 1 then
                             local hold_note = {
                                 id = id,
                                 model = {
-                                    timeJudge = math.floor(beat:toTime(chart.bpm_list, isnote.beat) * to_ms),
+                                    timeJudge = math.floor(beat:toTime(chart.bpm_list, isnote:getBeat()) * to_ms),
                                     type = 'hit',
                                     hitType = 'Slide'
                                 },
                             }
-                            if w == 0 or isnote.fake == 1 then
+                            if w == 0 or isnote:isFakeNote() then
                                 hold_note.model.properties = {}
                                 hold_note.model.properties.isDummy = {
                                     value = true,

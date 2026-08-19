@@ -1,7 +1,21 @@
-beat = object:new('beat')
-beat.nowbeat = 0
-beat.allbeat = 1
+--[[
+    模块名: beat
+    描述: 节拍/时间计算模块，提供 beat↔时间 的双向转换
+    作者: qwwshs
+    依赖: object, chart, time, settings, denom, math
 
+    beat 格式: {整数部分, 分子, 分母} 例如 {2, 1, 4} 表示 2又1/4拍
+    支持线性渐变 BPM（linear_ramp = 1）和突变 BPM（linear_ramp = 0）
+]]
+
+beat = object:new('beat')
+beat.nowbeat = 0    -- 当前 beat 值
+beat.allbeat = 1    -- 总 beat 数
+
+--- 将时间（秒）转换为 beat 值
+-- @tparam table bpm BPM 列表
+-- @tparam number nowtime 时间（秒）
+-- @treturn number beat 值
 function beat:toBeat(bpm, nowtime) --时间转换为beat
     local usetime = 0
 
@@ -66,7 +80,11 @@ function beat:toBeat(bpm, nowtime) --时间转换为beat
     return beat:get(bpm[#bpm].beat) + (bpm[#bpm].bpm / 60 * (nowtime - usetime))
 end
 
-function beat:toTime(bpm, isbeat) -- 根据bpm和beat计算时间
+--- 将 beat 值转换为时间（秒）
+-- @tparam table bpm BPM 列表
+-- @tparam number|table isbeat beat 值（数字或 {整数, 分子, 分母} 表）
+-- @treturn number 时间（秒）
+function beat:toTime(bpm, isbeat)
     if type(isbeat) == "table" then 
         isbeat = beat:get(isbeat) 
     end
@@ -145,7 +163,10 @@ function beat:toTime(bpm, isbeat) -- 根据bpm和beat计算时间
     return total_time + thetime(isbeat - beat:get(bpm[#bpm].beat), bpm[#bpm].bpm)
 end
 
-function beat:get(table) --beat转成数值
+--- 将 beat 表转换为数值
+-- @tparam table table beat 表 {整数, 分子, 分母}
+-- @treturn number 数值
+function beat:get(table)
     if table then
         return table[1] + table[2] / table[3]
     else
@@ -153,37 +174,11 @@ function beat:get(table) --beat转成数值
     end
 end
 
-function beat:bpmListSort()
-    local bpmlist = {}
-    while #chart.bpm_list > 0 do
-        local bpm_beat_min = 1
-        for i = 1, #chart.bpm_list do
-            if beat:get(chart.bpm_list[i].beat) < beat:get(chart.bpm_list[bpm_beat_min].beat) then
-                bpm_beat_min = i
-            end
-        end
-        bpmlist[#bpmlist + 1] = chart.bpm_list[bpm_beat_min]
-        table.remove(chart.bpm_list, bpm_beat_min)
-    end
-    for i = 1, #bpmlist do
-        chart.bpm_list[i] = bpmlist[i]
-    end
-    beat.allbeat = beat:toBeat(chart.bpm_list, time.alltime)
-end
-
-function beat:yToBeat(pos)
-    return (pos - settings.judge_line_y) / (-denom.scale * 100) + beat.nowbeat
-end
-
-function beat:toY(isbeat)
-    if type(isbeat) == "table" then
-        return settings.judge_line_y + (beat.nowbeat - beat:get(isbeat)) * denom.scale * 100
-    elseif type(isbeat) == "number" then
-        return settings.judge_line_y + (beat.nowbeat - isbeat) * denom.scale * 100
-    end
-end
-
-function beat:add(beat1, beat2) --两个beat相加
+--- 两个 beat 值相加
+-- @tparam number|table beat1 第一个 beat 值
+-- @tparam number|table beat2 第二个 beat 值
+-- @treturn table 结果 beat 表 {整数, 分子, 分母}
+function beat:add(beat1, beat2)
     local local_beat1
     local local_beat2
 
@@ -202,7 +197,11 @@ function beat:add(beat1, beat2) --两个beat相加
     return { local_beat1[1] + local_beat2[1], new_numor, new_denom }
 end
 
-function beat:sub(beat1, beat2) --beat相减
+--- 两个 beat 值相减
+-- @tparam number|table beat1 第一个 beat 值
+-- @tparam number|table beat2 第二个 beat 值
+-- @treturn table 结果 beat 表 {整数, 分子, 分母}
+function beat:sub(beat1, beat2)
     local local_beat1
     local local_beat2
     if type(beat1) == "number" then
@@ -220,6 +219,9 @@ function beat:sub(beat1, beat2) --beat相减
     return { local_beat1[1] - local_beat2[1], new_numor, new_denom }
 end
 
-function beat:toNearby(isbeat) --取最近的beat
+--- 将数值转换为最近的 beat 表
+-- @tparam number isbeat beat 数值
+-- @treturn table beat 表 {整数, 分子, 分母}
+function beat:toNearby(isbeat)
     return { math.floor(isbeat), math.getNearNumerator(isbeat, denom.denom), denom.denom }
 end

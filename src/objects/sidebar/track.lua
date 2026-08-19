@@ -1,4 +1,5 @@
 --track界面
+local ChartService = require("src.services.chartService")
 local Gtrack = group:new('track')
 Gtrack.type = "track"
 Gtrack.range = {x = {from = {value = '0'},to = {value = '0'}},w = {from = {value = '0'},to = {value = '0'}}} --轨道搜索范围
@@ -15,7 +16,8 @@ function Gtrack:Nui()
     local wt = tonumber(self.range.w.to.value)
     Nui:layoutRow('dynamic', layout.uiH, layout.cols)
     for i,v in ipairs(allTrack) do
-        local track_info = fTrack:get_track_info(v)
+        local track_name = ChartService:getTrackField(v, 'name')
+        local track_type = ChartService:getTrackField(v, 'type')
         local x = allTrackPos[v].x
         local w = allTrackPos[v].w
 
@@ -29,7 +31,7 @@ function Gtrack:Nui()
             end
         end
 
-        if Nui:button(v.." x:"..x..' w:'..w..'name:'..track_info.name..' type:'..track_info.type) then
+        if Nui:button(v.." x:"..x..' w:'..w..'name:'..track_name..' type:'..track_type) then
             track:to(v)
         end
         if Nui:button(i18n:get('edit')) then

@@ -1,5 +1,6 @@
 
 local buttonMusicPlay = object:new('music_play')
+local ChartService = require("src.services.chartService")
 buttonMusicPlay.type = 'button'
 buttonMusicPlay.text = ''
 buttonMusicPlay.text2 = ''
@@ -8,8 +9,9 @@ buttonMusicPlay.img2 = isImage.pause
 
 function buttonMusicPlay:click()
     if not music then return end
+    local offset = ChartService:getOffset()
     music_play = not music_play
-    music:seek(math.max(0, time.nowtime - chart.offset / 1000) )
+    music:seek(math.max(0, time.nowtime - offset / 1000) )
     buttonMusicPlay.img,buttonMusicPlay.img2 = buttonMusicPlay.img2,buttonMusicPlay.img
     buttonMusicPlay.text,buttonMusicPlay.text2 = buttonMusicPlay.text2,buttonMusicPlay.text
 end
@@ -21,17 +23,18 @@ function buttonMusicPlay:keypressed(key)
 end
 
 function buttonMusicPlay:update(dt)
+    local offset = ChartService:getOffset()
     if music_play then
         time.nowtime = time.nowtime + dt * musicSpeed.speed
-        beat.nowbeat = beat:toBeat(chart.bpm_list,time.nowtime)
+        beat.nowbeat = ChartService:toBeat(time.nowtime)
         
         if not music then return end
         
-        if math.abs(music:tell("seconds") - (time.nowtime - chart.offset / 1000)) >= 0.05 then --疑似love2d有bug 音频在刚播放0.5s内时间对不上
-            music:seek(math.max(time.nowtime - chart.offset / 1000 ,0)) --补正播放差值
+        if math.abs(music:tell("seconds") - (time.nowtime - offset / 1000)) >= 0.05 then --疑似love2d有bug 音频在刚播放0.5s内时间对不上
+            music:seek(math.max(time.nowtime - offset / 1000 ,0)) --补正播放差值
         end
 
-        if time.nowtime - chart.offset / 1000 >= 0 then
+        if time.nowtime - offset / 1000 >= 0 then
             music:setPitch(musicSpeed.speed)
             music:setVolume( settings.music_volume / 100 ) --设置音量大小
             music:play()
@@ -41,12 +44,12 @@ function buttonMusicPlay:update(dt)
         if not music then return end
 
         music:pause() 
-        if time.nowtime - (chart.offset / 1000) >= 0 and time.nowtime  <= time.alltime then
-                music:seek(time.nowtime - chart.offset / 1000 )
+        if time.nowtime - (offset / 1000) >= 0 and time.nowtime  <= time.alltime then
+                music:seek(time.nowtime - offset / 1000 )
         else -- 超时
             music:seek(0)
             music_play = false
-            time.nowtime = chart.offset / 1000
+            time.nowtime = offset / 1000
         end
     end
 end

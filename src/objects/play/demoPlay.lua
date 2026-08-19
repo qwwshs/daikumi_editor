@@ -1,4 +1,6 @@
 --轨道渲染
+local ChartService = require("src.services.chartService")
+local CoordinateService = require("src.services.coordinateService")
 local demoPlay = object:new("demoPlay")
 local layout = require 'config.layouts.play'.demo
 demoPlay.sw = 1
@@ -86,51 +88,54 @@ function demoPlay:draw()
     end
 
     for i=1 ,#all_track do --轨道侧线绘制
-            local track_info = fTrack:get_track_info(all_track[i])
+            local track_w0thenShow = ChartService:getTrackField(all_track[i], 'w0thenShow')
+            local track_name = ChartService:getTrackField(all_track[i], 'name')
             local x,w = all_track_pos[all_track[i]].track_x,all_track_pos[all_track[i]].track_w
             x = x * sw
             w = w * sw
             if track.track == all_track[i] and (not demo.open ) then --选择到的底板
-                love.graphics.setColor(play.colors.selectingTrack) 
+                love.graphics.setColor(play.colors.white_dim) 
                 love.graphics.rectangle("fill",x,0,w,WINDOW.h)
             end
             if w ~= 0 then
                 love.graphics.setColor(1,1,1,effect.track_line_alpha / 100) --侧线
                 love.graphics.rectangle("line",x,0,w,WINDOW.h)
-            elseif w == 0 and track_info.w0thenShow == 1 then
+            elseif w == 0 and track_w0thenShow == 1 then
                 love.graphics.setColor(1,1,1,effect.track_line_alpha / 100) --侧线
                 love.graphics.rectangle("line",x,0,0.01,WINDOW.h)
             end
             if not demo.open then
-                love.graphics.setColor(play.colors.trackNum) --轨道编号 与名称
+                love.graphics.setColor(play.colors.white) --轨道编号 与名称
                 if track.track == all_track[i] then
-                    love.graphics.setColor(play.colors.selectingTrackNum) --轨道编号
+                    love.graphics.setColor(play.colors.cyan) --轨道编号
                 end
                 local str = ""
-                if track_info.name ~= '' then
-                    str = "("..track_info.name..")"
+                if track_name ~= '' then
+                    str = "("..track_name..")"
                 end
                 love.graphics.printf(  all_track[i]..str, x,judgePos-20,100, "center")
             end
     end
 
     --游玩区域侧线
-    love.graphics.setColor(play.colors.demoTrackline)
-    local x,w = fTrack:to_play_track(-chart.preference.x_offset,0.002*chart.preference.event_scale)
+    love.graphics.setColor(play.colors.white_half)
+    local x_offset = ChartService:getPreferenceField('x_offset')
+    local event_scale = ChartService:getPreferenceField('event_scale')
+    local x,w = fTrack:to_play_track(-x_offset,0.002*event_scale)
     x = x*sw
     w = w*sw
     love.graphics.rectangle("fill",x,0,w,WINDOW.h)
-    x,w = fTrack:to_play_track(-chart.preference.x_offset + chart.preference.event_scale,0.002*chart.preference.event_scale)
+    x,w = fTrack:to_play_track(-x_offset + event_scale,0.002*event_scale)
     x = x*sw
     w = w*sw
     love.graphics.rectangle("fill",x,0,w,WINDOW.h)
 
-    love.graphics.setColor(play.colors.demoTrackline2) --游玩区域侧线(外侧)
-    x,w = fTrack:to_play_track(-chart.preference.x_offset- 0.01 * chart.preference.event_scale,0.005 * chart.preference.event_scale)
+    love.graphics.setColor(play.colors.white) --游玩区域侧线(外侧)
+    x,w = fTrack:to_play_track(-x_offset- 0.01 * event_scale,0.005 * event_scale)
     x = x*sw
     w = w*sw
     love.graphics.rectangle("fill",x,0,w,WINDOW.h)
-    x,w = fTrack:to_play_track(-chart.preference.x_offset + 1.01 * chart.preference.event_scale,0.005 * chart.preference.event_scale)
+    x,w = fTrack:to_play_track(-x_offset + 1.01 * event_scale,0.005 * event_scale)
     x = x*sw
     w = w*sw
     love.graphics.rectangle("fill",x,0,w,WINDOW.h)
@@ -138,7 +143,7 @@ function demoPlay:draw()
     local note_h = settings.note_height*sh --25 * denom.scale
     local _width, _height = demoPlay.ui.note:getDimensions() -- 得到宽高
     love.graphics.setColor(1,1,1,effect.note_alpha / 100)
-    local end_beat = beat:yToBeat(0)
+    local end_beat = CoordinateService:yToBeat(0)
     local noteBeat = 0
     local noteBeat2 = 0
     local _scale_w
@@ -159,12 +164,14 @@ function demoPlay:draw()
     previous_frame_beat = beat.nowbeat
     previous_frame_starting_point = 0
 
-        for i = index_start,#chart.note do
-            isnote = chart.note[i]
-            noteBeat = beat:get(isnote.beat)
-            noteBeat2 = beat:get(isnote.beat2 or isnote.beat)
+        for i = index_start, ChartService:getNoteCount() do
+            isnote = ChartService:getNote(i)
+            noteBeat = isnote:getBeatValue()
+            local beat2 = isnote:getBeat2()
+            noteBeat2 = beat2 and isnote:getBeat2Value() or noteBeat
             if noteBeat > end_beat then break end --超过可见范围
-            x,w =  all_track_pos[isnote.track].track_x,all_track_pos[isnote.track].track_w
+            local trackId = isnote:getTrack()
+            x,w =  all_track_pos[trackId].track_x,all_track_pos[trackId].track_w
             x = x * sw
             w = w * sw
 
@@ -175,34 +182,34 @@ function demoPlay:draw()
                 w = spacing * w / math.abs(w)
             end
             x = x - w /2
-            y = beat:toY(noteBeat)
+            y = CoordinateService:toY(noteBeat)
             y2 = y
-            if isnote.type == "hold" then
-                y2 = beat:toY(noteBeat2)
+            if isnote:isHold() then
+                y2 = CoordinateService:toY(noteBeat2)
             end
             y = y * sh
             y2 = y2 * sh
             _scale_w = 1 / _width * w
 
             _scale_h = 1 / _height * note_h
-            if (noteBeat > beat.nowbeat or (noteBeat2 > beat.nowbeat)) and previous_frame_starting_point == 0 then 
-                previous_frame_starting_point = i - 1 
+            if (noteBeat > beat.nowbeat or (noteBeat2 > beat.nowbeat)) and previous_frame_starting_point == 0 then
+                previous_frame_starting_point = i - 1
             end
 
-            if math.intersect(0,judgePos,y,y2) and not (y > judgePos and isnote.fake == 1 ) then
+            if math.intersect(0,judgePos,y,y2) and not (y > judgePos and isnote:isFakeNote() ) then
                 if y ~= y2 and y > judgePos then y = judgePos end --hold头保持在线上
 
-                if isnote.type ~= "hold" then
-                    love.graphics.draw(self.ui[isnote.type],x+w/2,y-note_h+note_h/2,effect.note_rotate,_scale_w,_scale_h,_width/2,_height/2) --后面两个值用于旋转
+                if not isnote:isHold() then
+                    love.graphics.draw(self.ui[isnote:getType()],x+w/2,y-note_h+note_h/2,effect.note_rotate,_scale_w,_scale_h,_width/2,_height/2) --后面两个值用于旋转
                 else --hold
                     _scale_h2 = 1 / _height * (y - y2 - note_h - note_h)
                     love.graphics.draw(self.ui.hold,x,y-note_h,0,_scale_w,_scale_h)
                     love.graphics.draw(self.ui.holdBody,x,y2+note_h,0,_scale_w,_scale_h2) --身
                     love.graphics.draw(self.ui.holdTail,x,y2,0,_scale_w,_scale_h)
-                    if isnote.note_head == 1 then
+                    if isnote:getNoteHead() == 1 then
                         love.graphics.draw(self.ui.note,x+w/2,y-note_h+note_h/2,effect.note_rotate,_scale_w,_scale_h,_width/2,_height/2)
                     end
-                    if isnote.wipe_head == 1 then
+                    if isnote:getWipeHead() == 1 then
                         love.graphics.draw(self.ui.wipe,x+w/2,y-note_h+note_h/2,effect.note_rotate,_scale_w,_scale_h,_width/2,_height/2)
                     end
                 end
@@ -211,25 +218,25 @@ function demoPlay:draw()
         end
 
     --遮挡板
-    local start_x = fTrack:to_play_track(-chart.preference.x_offset,0) *sw
-    local end_x = fTrack:to_play_track(-chart.preference.x_offset + chart.preference.event_scale,0) *sw
-    love.graphics.setColor(play.colors.Shield)
+    local start_x = fTrack:to_play_track(-x_offset,0) *sw
+    local end_x = fTrack:to_play_track(-x_offset + event_scale,0) *sw
+    love.graphics.setColor(play.colors.black)
     love.graphics.rectangle("fill",start_x,judgePos,end_x - start_x,WINDOW.h - judgePos)
 
     --进度条
-    local progress_bar = fTrack:to_play_track(-chart.preference.x_offset + chart.preference.event_scale * 0.2,0) *sw
-    love.graphics.setColor(play.colors.ProgressBar)
+    local progress_bar = fTrack:to_play_track(-x_offset + event_scale * 0.2,0) *sw
+    love.graphics.setColor(play.colors.white)
     love.graphics.rectangle("fill",start_x + (end_x - start_x)/2-(progress_bar*time.nowtime/time.alltime) / 2,judgePos+30,time.nowtime/time.alltime * progress_bar,5)
 
     love.graphics.rectangle("fill",start_x + (end_x - start_x)/2-progress_bar/2,judgePos+29,1,7)
     love.graphics.rectangle("fill",start_x + (end_x - start_x)/2+progress_bar/2,judgePos+29,1,7)
 
     --判定线
-    love.graphics.setColor(play.colors.judgeLine) --判定线内部
+    love.graphics.setColor(play.colors.dcyan) --判定线内部
     love.graphics.rectangle("fill",start_x,judgePos-5,end_x - start_x,10)
 
 
-    love.graphics.setColor(play.colors.judge) --判定线 play
+    love.graphics.setColor(play.colors.white) --判定线 play
 
     love.graphics.rectangle("line",start_x,judgePos-8,end_x - start_x,16) --8是为了对其中心
     love.graphics.pop()

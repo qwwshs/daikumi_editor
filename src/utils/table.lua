@@ -1,4 +1,14 @@
-function table.eq(table1, table2)  --判断两个表是否内容相等
+--[[
+    模块名: table 扩展
+    描述: 为 Lua table 库添加常用工具函数
+    作者: qwwshs
+]]
+
+--- 判断两个表是否内容相等（递归比较）
+-- @tparam table table1 第一个表
+-- @tparam table table2 第二个表
+-- @treturn boolean 是否相等
+function table.eq(table1, table2)
     -- 如果两个表是同一个引用，直接返回 true  
     if table1 == table2 then  
         return true  
@@ -44,6 +54,9 @@ function table.eq(table1, table2)  --判断两个表是否内容相等
     return true  
 end
 
+--- 深拷贝表（递归复制所有嵌套表）
+-- @tparam table original 原始表
+-- @treturn table 深拷贝后的新表
 function table.copy(original)  
     local copy = {}  
     for key, value in pairs(original) do  
@@ -57,7 +70,11 @@ function table.copy(original)
     return copy  
 end  
 
-function table.find(array, element)  --元素查询
+--- 在表中查找元素是否存在
+-- @tparam table array 要搜索的表
+-- @tparam any element 要查找的元素
+-- @treturn boolean 是否找到
+function table.find(array, element)
     for _, value in pairs(array) do  
         if value == element then  
             return true  
@@ -66,7 +83,11 @@ function table.find(array, element)  --元素查询
     return false  
 end  
 
-function table.fill(tbl, metatable,func) --补充元素
+--- 用默认值填充表中缺失的字段
+-- @tparam table tbl 目标表
+-- @tparam table metatable 包含默认值的模板表
+-- @tparam boolean func 是否填充函数类型字段（默认 false）
+function table.fill(tbl, metatable, func)
     func = func or false --是否补充函数
     for key, value in pairs(metatable) do
         if type(value) == "table" then

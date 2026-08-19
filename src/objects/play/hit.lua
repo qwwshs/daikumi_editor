@@ -1,4 +1,5 @@
 local hit = object:new('hit')
+local ChartService = require("src.services.chartService")
 hit.sw = 1
 hit.sh = 1
 hit.ex = 0
@@ -82,37 +83,39 @@ function hit:update(dt)
     previous_frame_beat = beat.nowbeat
     previous_frame_starting_point = 0
 
-    for i = index_start, #chart.note do
-        local noteBeat = beat:get(chart.note[i].beat)
-        local noteTrack = chart.note[i].track
+    for i = index_start, ChartService:getNoteCount() do
+        local n = ChartService:getNote(i)
+        local noteBeat = n:getBeatValue()
+        local noteTrack = n:getTrack()
+        local noteType = n:getType()
         self.hittab[noteBeat] = self.hittab[noteBeat] or {}
         self.hittab[noteBeat][noteTrack] = self.hittab[noteBeat][noteTrack] or {}
         local will_play = self.hittab[noteBeat][noteTrack]
-        if will_play[chart.note[i].type] == nil and not (chart.note[i].fake == 1) then --不存在 记录
-            will_play[chart.note[i].type] = true
+        if will_play[noteType] == nil and not n:isFakeNote() then --不存在 记录
+            will_play[noteType] = true
             if noteBeat <= beat.nowbeat then --时间过了 不播放
-                will_play[chart.note[i].type] = false
+                will_play[noteType] = false
             end
         end
         if noteBeat <= beat.nowbeat and --播放
-            will_play[chart.note[i].type] then
+            will_play[noteType] then
             local x, w = now_track[noteTrack].x, now_track[noteTrack].w
             w = math.abs(w)
-            will_play[chart.note[i].type] = false                                            --播放完成
+            will_play[noteType] = false                                            --播放完成
             index_start = i
-            if self.sound and settings.hit_sound == 1 and music_play and w > 0 and not (chart.note[i].fake == 1) then --播放
+            if self.sound and settings.hit_sound == 1 and music_play and w > 0 and not n:isFakeNote() then --播放
                 will_play_sound_number = will_play_sound_number + 1
 
             end
-            if settings.hit == 1 and music_play and w > 0 and chart.note[i].fake == 0 and time.nowtime - beat:toTime(chart.bpm_list,noteBeat) < 0.5 then
+            if settings.hit == 1 and music_play and w > 0 and not n:isFakeNote() and time.nowtime - ChartService:toTime(noteBeat) < 0.5 then
                 self.tab[#self.tab + 1] = { x = fTrack:to_play_track_x(x), time = time.nowtime, track = noteTrack }
             end
         end
-        if time.nowtime - beat:toTime(chart.bpm_list,noteBeat) < 0.5 and previous_frame_starting_point == 0 then
+        if time.nowtime - ChartService:toTime(noteBeat) < 0.5 and previous_frame_starting_point == 0 then
                 previous_frame_starting_point = i - 1
         end
         if noteBeat > beat.nowbeat then --时间未到 记录
-            will_play[chart.note[i].type] = true --未播放
+            will_play[noteType] = true --未播放
         end
     end
     will_play_sound_number = math.min(will_play_sound_number, 5) --限制同时播放的音效数量，避免过多重叠

@@ -1,46 +1,90 @@
+--[[
+    模块名: fTrack
+    描述: 轨道坐标转换模块，处理谱面坐标 ↔ 屏幕坐标的映射
+    作者: qwwshs
+    依赖: object, ChartService, settings, play, track, math
+]]
+
 local fTrack = object:new('fTrack')
+local ChartService = require("src.services.chartService")
+
+--- 获取轨道在 play 区域的水平偏移量
+-- @treturn number 偏移量（像素）
 function fTrack:get_track_offset()
     return (play.layout.demo.w - 100*settings.track_w_scale) / 2
 end
+--- 将谱面坐标转换为屏幕坐标
+-- @tparam number x 谱面 x 坐标
+-- @tparam number w 谱面宽度
+-- @treturn number 屏幕 x 坐标
+-- @treturn number 屏幕宽度
 function fTrack:to_play_track(x,w)
     x = x or 0
     w = w  or 0
-    return (x + chart.preference.x_offset -w /2) / chart.preference.event_scale * 100 *settings.track_w_scale + fTrack:get_track_offset(),
-    w*settings.track_w_scale / chart.preference.event_scale * 100
+    local x_offset = ChartService:getPreferenceField('x_offset')
+    local event_scale = ChartService:getPreferenceField('event_scale')
+    return (x + x_offset -w /2) / event_scale * 100 *settings.track_w_scale + fTrack:get_track_offset(),
+    w*settings.track_w_scale / event_scale * 100
 end
-function fTrack:to_play_original_track(x,w) --废弃 不用
+--- 将谱面坐标转换为屏幕坐标（不含 x_offset 偏移，已废弃）
+-- @tparam number x 谱面 x 坐标
+-- @tparam number w 谱面宽度
+-- @treturn number 屏幕 x 坐标
+-- @treturn number 屏幕宽度
+function fTrack:to_play_original_track(x,w)
     x = x or 0
     w = w  or 0
-    
-    return (x-w /2) / chart.preference.event_scale * 100 *settings.track_w_scale + fTrack:get_track_offset(),
-    w*settings.track_w_scale / chart.preference.event_scale * 100
+    local event_scale = ChartService:getPreferenceField('event_scale')
+    return (x-w /2) / event_scale * 100 *settings.track_w_scale + fTrack:get_track_offset(),
+    w*settings.track_w_scale / event_scale * 100
 end
 
+--- 将谱面 x 坐标转换为屏幕 x 坐标（不含宽度）
+-- @tparam number x 谱面 x 坐标
+-- @treturn number 屏幕 x 坐标
 function fTrack:to_play_track_x(x)
     x = x or 0
-    return (x+ chart.preference.x_offset)/ chart.preference.event_scale * 100 *settings.track_w_scale + fTrack:get_track_offset()
+    local x_offset = ChartService:getPreferenceField('x_offset')
+    local event_scale = ChartService:getPreferenceField('event_scale')
+    return (x+ x_offset)/ event_scale * 100 *settings.track_w_scale + fTrack:get_track_offset()
 end
+--- 将谱面宽度转换为屏幕宽度
+-- @tparam number w 谱面宽度
+-- @treturn number 屏幕宽度
 function fTrack:to_play_track_w(w)
     w = w or 0
-    return w*settings.track_w_scale / chart.preference.event_scale * 100
+    local event_scale = ChartService:getPreferenceField('event_scale')
+    return w*settings.track_w_scale / event_scale * 100
 end
-function fTrack:to_chart_track(x) --play区域的x转谱面轨道x
-            local track_start_x = fTrack:to_play_track(-chart.preference.x_offset, 0)  
-        return (x - track_start_x) / settings.track_w_scale / 100 * chart.preference.event_scale  
+--- 将屏幕 x 坐标转换为谱面轨道 x 坐标
+-- @tparam number x 屏幕 x 坐标
+-- @treturn number 谱面轨道 x 坐标
+function fTrack:to_chart_track(x)
+    local x_offset = ChartService:getPreferenceField('x_offset')
+    local event_scale = ChartService:getPreferenceField('event_scale')
+            local track_start_x = fTrack:to_play_track(-x_offset, 0)  
+        return (x - track_start_x) / settings.track_w_scale / 100 * event_scale  
 end
-function fTrack:track_get_max_track() --得到最大的轨道
+--- 获取谱面中最大的轨道编号
+-- @treturn number 最大轨道编号
+function fTrack:track_get_max_track()
     local max_track = 0
-    for i = 1, #chart.event do
-        if chart.event[i].track > max_track then
-            max_track = chart.event[i].track
+    for i = 1, ChartService:getEventCount() do
+        local t = ChartService:getEvent(i):getTrack()
+        if t > max_track then
+            max_track = t
         end
     end
     return max_track
 end
-function fTrack:track_get_near_fence() --得到附近的栅栏  
+--- 获取鼠标附近最近的栅栏位置
+-- @treturn number 栅栏编号（从1开始）
+function fTrack:track_get_near_fence()  
     local min = 1  
-    local track_start_x = fTrack:to_play_track(-chart.preference.x_offset, 0)  
-    local track_end_x = fTrack:to_play_track(-chart.preference.x_offset + chart.preference.event_scale, 0)  
+    local x_offset = ChartService:getPreferenceField('x_offset')
+    local event_scale = ChartService:getPreferenceField('event_scale')
+    local track_start_x = fTrack:to_play_track(-x_offset, 0)  
+    local track_end_x = fTrack:to_play_track(-x_offset + event_scale, 0)  
     local track_width = track_end_x - track_start_x  
       
     for i = 1, track.fence do  
@@ -51,23 +95,28 @@ function fTrack:track_get_near_fence() --得到附近的栅栏
     end  
     return min  
 end  
-  
-function fTrack:track_get_near_fence_x() --得到附近的栅栏所对应的chart区域的x  
+--- 获取鼠标附近最近的栅栏对应的谱面 x 坐标
+-- @treturn number 谱面 x 坐标
+function fTrack:track_get_near_fence_x()  
     local pos = 0  
+    local x_offset = ChartService:getPreferenceField('x_offset')
+    local event_scale = ChartService:getPreferenceField('event_scale')
     if track.fence == 0 then  
         return self:to_chart_track(mouse.x)
     else  
-        pos = (chart.preference.event_scale / track.fence * fTrack:track_get_near_fence()) - chart.preference.x_offset  
+        pos = (event_scale / track.fence * fTrack:track_get_near_fence()) - x_offset  
     end  
     return pos  
 end
-function fTrack:track_get_all_track() --得到所有的轨道
+--- 获取谱面中所有使用的轨道编号
+-- @treturn table 轨道编号数组（已排序）
+function fTrack:track_get_all_track()
     local temp_track = {}
-    for i = 1,#chart.event do
-        temp_track[chart.event[i].track] = 1
+    for i = 1, ChartService:getEventCount() do
+        temp_track[ChartService:getEvent(i):getTrack()] = 1
     end
-    for i = 1,#chart.note do
-        temp_track[chart.note[i].track] = 1
+    for i = 1, ChartService:getNoteCount() do
+        temp_track[ChartService:getNote(i):getTrack()] = 1
     end
     local temp2_track = {} --整理temp_track
     for i,v in pairs(temp_track) do
@@ -77,10 +126,4 @@ function fTrack:track_get_all_track() --得到所有的轨道
     return temp2_track
 end
 
-function fTrack:get_track_info(track)
-    if not chart.track[tostring(track)] then
-        chart.track[tostring(track)] = table.copy(meta_track.__index)
-    end
-    return chart.track[tostring(track)]
-end
 return fTrack

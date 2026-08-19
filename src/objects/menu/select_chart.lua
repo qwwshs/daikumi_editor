@@ -1,22 +1,23 @@
 local select_chart = object:new('select_chart')
 local layout       = require 'config.layouts.menu' --菜单布局
 local colors       = require 'config.colors.menu' --菜单颜色
+local ChartService = require("src.services.chartService") --谱面数据服务
 function select_chart:draw()
     love.graphics.setFont(FONT.normal)
     local fontHeight = love.graphics.getFont():getHeight()
 
     --谱面信息
-    love.graphics.setColor(colors.chartInofoBg)
+    love.graphics.setColor(colors.white_fade)
     love.graphics.rectangle("fill", layout.chartSelect.x, layout.chartSelect.y - layout.chartSelect.chartH / 2,
         layout.chartSelect.w, layout.chartSelect.h)
 
     for i = 1, #menu.chartInfo.chart_name do
         if i == menu.selectChartPos then
-            love.graphics.setColor(colors.selectThischartText)
+            love.graphics.setColor(colors.white)
         else
-            love.graphics.setColor(colors.unSelectThischartText)
+            love.graphics.setColor(colors.white_half)
         end
-        if not menu.chartInfo.chart_name[i].is_true_chart then love.graphics.setColor(colors.errorChart) end
+        if not menu.chartInfo.chart_name[i].is_true_chart then love.graphics.setColor(colors.lred) end
         love.graphics.printf('chart:' .. menu.chartInfo.chart_name[i].name, layout.chartSelect.x,
             (menu.selectChartPos - i) * layout.chartSelect.chartH + layout.chartSelect.y - fontHeight / 2,
             layout.chartSelect.w, "center")
@@ -47,9 +48,7 @@ function select_chart:wheelmoved(x, y)
                 menu.chartInfo.chart_name[menu.selectChartPos].is_true_chart = false
                 info = {}
             end
-            setmetatable(info, meta_chart) --防谱报废
-            table.fill(info, meta_chart.__index)
-            chart = table.copy(info)       --读取谱面
+            ChartService:setChart(info)       --读取谱面（内部深拷贝并补默认字段）
         end
     end
 end

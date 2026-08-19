@@ -19,8 +19,8 @@ function save(tab, name)         --谱与设置保存
         local s,result = pcall(function()
             nativefs.mount(PATH.base)
             nativefs.write(
-            PATH.usersPath.auto_save .. os.date("%Y %m %d %H %M %S") .. chart.info.song_name ..
-            "-" .. chart.info.chart_name .. '.json', dkjson.encode(tab, { indent = true }))
+            PATH.usersPath.auto_save .. os.date("%Y %m %d %H %M %S") .. tab.info.song_name ..
+            "-" .. tab.info.chart_name .. '.json', dkjson.encode(tab, { indent = true }))
             nativefs.unmount()
         end)
         if not s then

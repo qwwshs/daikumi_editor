@@ -1,69 +1,94 @@
-local note = object:new('note')
-note.__index = meta_note.__index
+--[[
+    模块名: note
+    描述: note（音符）操作模块，处理音符的点击、删除、放置、排序
+    作者: qwwshs
+    依赖: object, meta_note, beat, track, ChartService, denom, messageBox
+]]
 
-note.local_hold = {} -- 局部hold表
-note.hold_type = 0 --长条状态 0没放 1头 2尾
-note.local_tab =  {} --局部note表
-function note:holdCleanUp() --长条清除
+local note = object:new('note')
+local Note = require("src.objects.Note")
+local ChartService = require("src.services.chartService")
+local CoordinateService = require("src.services.coordinateService")
+
+note.local_hold = {} -- hold 音符临时数据（放置过程中）
+note.hold_type = 0   -- hold 放置状态: 0=未放置, 1=已放头, 2=已放尾
+note.local_tab = {}  -- 最近一次放置的 note 信息
+
+--- 清除 hold 放置状态
+function note:holdCleanUp()
     note.local_hold = {}
     note.local_tab = {}
     note.hold_type = 0
 end
--- note函数
+--- 在指定位置查找 note（用于点击选中）
+-- @tparam number pos 屏幕 Y 坐标
+-- @treturn number|nil 找到的 note 索引，未找到返回 nil
 function note:click(pos)
     --检测区间
     local pos_interval = 20 * denom.scale
     --根据距离反推出beat
-    local note_beat_up = beat:yToBeat(pos - pos_interval)
-    local note_beat_down = beat:yToBeat(pos + pos_interval)
-    for i = 1,#chart.note do
-        if chart.note[i].track == track.track and 
-        (math.intersect(beat:get(chart.note[i].beat),beat:get(chart.note[i].beat),note_beat_down,note_beat_up)
-        or (chart.note[i].beat2 and -- 长条
-        math.intersect(beat:get(chart.note[i].beat),beat:get(chart.note[i].beat2),note_beat_down,note_beat_up))) then
+    local note_beat_up = CoordinateService:yToBeat(pos - pos_interval)
+    local note_beat_down = CoordinateService:yToBeat(pos + pos_interval)
+    for i = 1, ChartService:getNoteCount() do
+        local isnote = ChartService:getNote(i)
+        local beatVal = isnote:getBeatValue()
+        local beat2 = isnote:getBeat2()
+        if isnote:getTrack() == track.track and
+        (math.intersect(beatVal, beatVal, note_beat_down, note_beat_up)
+        or (beat2 and -- 长条
+        math.intersect(beatVal, isnote:getBeat2Value(), note_beat_down, note_beat_up))) then
             return i
         end
     end
 end
 
+--- 删除指定位置的 note
+-- @tparam number pos 屏幕 Y 坐标
 function note:delete(pos)
     --删除检测区间
     local pos_interval = 20 * denom.scale
     --根据距离反推出beat
-    local note_beat_up = beat:yToBeat(pos - pos_interval)
-    local note_beat_down = beat:yToBeat(pos + pos_interval)
-    for i = 1,#chart.note do
-        local isnote = chart.note[i]
-        if isnote.track == track.track and 
-        ((beat:get(isnote.beat) >= note_beat_down and beat:get(isnote.beat) <= note_beat_up)
-        or (isnote.beat2 and -- 长条
-        math.intersect(beat:get(isnote.beat), beat:get(isnote.beat2), note_beat_up, note_beat_down))) then
-            chart:delete(isnote)
+    local note_beat_up = CoordinateService:yToBeat(pos - pos_interval)
+    local note_beat_down = CoordinateService:yToBeat(pos + pos_interval)
+    for i = 1, ChartService:getNoteCount() do
+        local isnote = ChartService:getNote(i)
+        local beatVal = isnote:getBeatValue()
+        local beat2 = isnote:getBeat2()
+        if isnote:getTrack() == track.track and
+        ((beatVal >= note_beat_down and beatVal <= note_beat_up)
+        or (beat2 and -- 长条
+        math.intersect(beatVal, isnote:getBeat2Value(), note_beat_up, note_beat_down))) then
+            ChartService:delete(isnote)
             sidebar.displayed_content = 'nil'
             return
         end
     end
 end
 
+--- 在指定位置放置 note
+-- @tparam string note_type note 类型: "note", "hold", "wipe"
+-- @tparam number pos 屏幕 Y 坐标
+-- @treturn boolean|nil 放置成功返回 true，失败返回 false
 function note:place(note_type,pos)
     --根据距离反推出beat
-    local note_beat = beat:toNearby(beat:yToBeat(pos))
+    local note_beat = beat:toNearby(CoordinateService:yToBeat(pos))
     if note_type ~= "hold" then --不是长条
         --查表 如果重叠不给放
         local note_correct_beat = {note_beat[1],note_beat[2],note_beat[3]}
-        for i = 1,#chart.note do --重叠
-            if chart.note[i].track == track.track and beat:get(chart.note[i].beat) == beat:get(note_correct_beat) then
+        for i = 1, ChartService:getNoteCount() do --重叠
+            local isnote = ChartService:getNote(i)
+            if isnote:getTrack() == track.track and isnote:getBeatValue() == beat:get(note_correct_beat) then
                 messageBox:add("overlap")
                 return false
             end
         end
-        local isnote
-        isnote = table.copy(note.__index)
-        isnote.type = note_type
-        isnote.track = track.track
-        isnote.beat = {note_beat[1],note_beat[2],note_beat[3]}
-        isnote.fake = noteFake.v
-        chart:add(isnote)
+        local isnote = Note.new({
+            type = note_type,
+            track = track.track,
+            beat = {note_beat[1],note_beat[2],note_beat[3]},
+            fake = noteFake.v,
+        })
+        ChartService:add(isnote)
 
         note.local_tab = {type = note_type,
         track = track.track,
@@ -71,31 +96,31 @@ function note:place(note_type,pos)
         ,fake = noteFake.v}
     else
         if note.hold_type == 0 then --放置头
-            note.local_hold = {
+            note.local_hold = Note.new({
                 type = note_type,
                 track = track.track,
                 beat = {note_beat[1],note_beat[2],note_beat[3]},
                 fake = noteFake.v,
                 note_head = holdNoteHead.v,
                 wipe_head = holdWipeHead.v,
-            }
+            })
             note.hold_type = 1
-            
+
             note.local_tab = table.copy(note.local_tab)
             note.local_tab.type = note_type
             note.local_tab.beat = {note_beat[1],note_beat[2],note_beat[3]}
             note.local_tab.track = track.track
             note.local_tab.fake = noteFake.v
-            
+
         elseif note.hold_type == 1 then
-            note.local_hold.beat2 = {note_beat[1],note_beat[2],note_beat[3]} 
-            note.local_tab.beat2 = {note_beat[1],note_beat[2],note_beat[3]} 
-            if beat:get(note.local_hold.beat2) <= beat:get(note.local_hold.beat) then --尾巴比头早或重叠
+            note.local_hold:setBeat2({note_beat[1],note_beat[2],note_beat[3]})
+            note.local_tab.beat2 = {note_beat[1],note_beat[2],note_beat[3]}
+            if note.local_hold:getBeat2Value() <= note.local_hold:getBeatValue() then --尾巴比头早或重叠
                 messageBox:add("illegal operation")
                 note:holdCleanUp()
                 return false
             else -- 合法操作
-                chart:add(note.local_hold)
+                ChartService:add(note.local_hold)
                 note.hold_type = 2
 
             end
@@ -106,15 +131,15 @@ function note:place(note_type,pos)
         note:sort()
     end
 end
+--- 对 note 列表按 beat 位置排序
 function note:sort()
-        table.sort(chart.note,function(a,b) return beat:get(a.beat) < beat:get(b.beat) end)
-        for i,v in pairs(extra_chart.track) do
-            table.sort(v.note,function(a,b) return beat:get(a.beat) < beat:get(b.beat) end)
-        end
-        note.local_tab = {}
-        note.local_hold = {}
-        note.hold_type = 0
+    ChartService:sortNotes()
+    note.local_tab = {}
+    note.local_hold = {}
+    note.hold_type = 0
 end
+--- 获取当前 hold 放置的临时数据
+-- @treturn table hold 数据表
 function note:getHoldTable()
     return note.local_hold
 end

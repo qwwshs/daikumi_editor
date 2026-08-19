@@ -1,4 +1,5 @@
 --denom播放
+local CoordinateService = require("src.services.coordinateService")
 denomPlay = object:new('denomPlay')
 local beat_y = 0
 local fontHeight = love.graphics.getFont():getHeight() --字体高度
@@ -7,11 +8,11 @@ function denomPlay:draw()
     local isbeat = 1
     local isdenom = 1
     local r, g, b = 1, 1, 1
-    local start_beat = beat:yToBeat(WINDOW.h)
-    local end_beat = beat:yToBeat(0)
+    local start_beat = CoordinateService:yToBeat(WINDOW.h)
+    local end_beat = CoordinateService:yToBeat(0)
     for i = math.floor(start_beat * denom.denom), math.ceil(end_beat * denom.denom) do
         isbeat = i / denom.denom
-        beat_y = beat:toY(isbeat)
+        beat_y = CoordinateService:toY(isbeat)
         if beat_y > WINDOW.h then
             goto next
         elseif beat_y < 0 then
@@ -23,7 +24,7 @@ function denomPlay:draw()
             goto denom
         end
         ::beat::
-        love.graphics.setColor(play.colors.beat)                                                          -- 节拍线颜色
+        love.graphics.setColor(play.colors.white)                                                          -- 节拍线颜色
         love.graphics.rectangle("fill", play.layout.left_boundary, beat_y, play.layout.right_boundary, 1) -- 节拍线
         love.graphics.push()
             love.graphics.translate(play.layout.right_boundary + fontHeight + 2, beat_y )
@@ -55,9 +56,9 @@ function denomPlay:draw()
     --鼠标指针所在位置所对应的beat渲染
     if play:mouseInPlay() then     --在play里面
         --根据距离反推出beat
-        love.graphics.setColor(play.colors.mouseBeat)
+        love.graphics.setColor(play.colors.white_half)
         love.graphics.rectangle("fill", play.layout.right_boundary,
-            beat:toY(beat:get(beat:toNearby(beat:yToBeat(mouse.y)))),
+            CoordinateService:toY(beat:get(beat:toNearby(CoordinateService:yToBeat(mouse.y)))),
             play.layout.left_boundary - play.layout.right_boundary, 2)
     end
 end

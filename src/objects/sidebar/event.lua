@@ -1,4 +1,5 @@
 --event界面
+local ChartService = require("src.services.chartService")
 local Gevent = group:new('event')
 Gevent.type = "event"
 Gevent.layout = require 'config.layouts.sidebar'.event
@@ -30,18 +31,18 @@ end
 setmetatable(Gevent.bezier,meta_default_bezier)
 
 function Gevent:to(event_index)
-    local v = chart.event[event_index]
+    local v = ChartService:getEvent(event_index)
     Incoming_event = v
-    self.fromv.value = tostring(v.from)
-    self.tov.value = tostring(v.to)
+    self.fromv.value = tostring(v:getFrom())
+    self.tov.value = tostring(v:getTo())
     self.transv.value = ''
-    if v.trans.type == 'bezier' then
+    if v:getTransType() == 'bezier' then
         self.transType.value = 1
-        self.transv.value = table.concat(v.trans.trans, ",")
-    elseif v.trans.type == 'easings' then
+        self.transv.value = table.concat(v:getTransData(), ",")
+    elseif v:getTransType() == 'easings' then
         self.transType.value = 2
-        self.transv.value = tostring(v.trans.easings)
-        self.easings_index.value = v.trans.easings
+        self.transv.value = tostring(v:getEasings())
+        self.easings_index.value = v:getEasings()
     end
 end
 
@@ -155,10 +156,10 @@ function Gevent:Nui()
     Nui:label(i18n:get("trans_type"))
     if Nui:combobox(self.transType,{'bezier','easings'}) then
         if self.transType.value == 1 then
-            self.transv.value = table.concat(Incoming_event.trans.trans, ",")
+            self.transv.value = table.concat(Incoming_event:getTransData(), ",")
         elseif self.transType.value == 2 then
-            self.transv.value = tostring(Incoming_event.trans.easings)
-            self.easings_index.value = Incoming_event.trans.easings
+            self.transv.value = tostring(Incoming_event:getEasings())
+            self.easings_index.value = Incoming_event:getEasings()
         end
     end
 
@@ -172,9 +173,9 @@ function Gevent:Nui()
 end
 
 function Gevent:NuiNext() --更新信息
-    local v = chart.event[sidebar.incoming[1]]
+    local v = ChartService:getEvent(sidebar.incoming[1])
     if not v then return end
-    
+
     if iskeyboard['return'] then --对from以及to进行计算
         pcall(function ()
             self.fromv.value = loadstring(
@@ -183,7 +184,7 @@ function Gevent:NuiNext() --更新信息
             now.x,now.w = fEvent:get(track.track,beat.nowbeat,true)
             now.lpos,now.rpos = now.x - now.w / 2,now.x + now.w / 2
             local r = math.random
-            return 
+            return
             ]]..self.fromv.value)()
             if type(self.fromv.value) ~= "number" then
                 self.fromv.value = 0
@@ -197,25 +198,26 @@ function Gevent:NuiNext() --更新信息
         end)
     end
 
-    v.from = tonumber(self.fromv.value) or 0
-    v.to = tonumber(self.tov.value) or 0
+    v:setFrom(tonumber(self.fromv.value) or 0)
+    v:setTo(tonumber(self.tov.value) or 0)
     if self.transType.value == 1 then
-        v.trans.type = 'bezier'
+        v:setTransType('bezier')
     elseif self.transType.value == 2 then
-        v.trans.type = 'easings'
+        v:setTransType('easings')
     end
 
-    if v.trans.type == 'bezier' then
-        for i = 1,#v.trans.trans do
-            v.trans.trans[i] = nil
+    if v:getTransType() == 'bezier' then
+        local td = v:getTransData()
+        for i = 1, #td do
+            td[i] = nil
         end
         for i in string.gmatch(self.transv.value, "[^,]+") do
             local value = tonumber(i) or 0
-            table.insert(v.trans.trans,value)
+            table.insert(td, value)
         end
-    elseif v.trans.type == 'easings' then
+    elseif v:getTransType() == 'easings' then
         value = tonumber(self.transv.value) or 1
-        v.trans.easings = value
+        v:setEasings(value)
     end
 end
 

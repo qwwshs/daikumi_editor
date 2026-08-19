@@ -63,7 +63,7 @@ end
 function FFT:draw()
     if not fft_start then return end
     local barHeight = WINDOW.nowH / (fftSize / 10) -- 调整条形宽度
-    love.graphics.setColor(menu.color.fft)
+    love.graphics.setColor(menu.color.white_half)
     for i = 1, #fftArray - 1 do
         -- fftArray[i] 是第i个频段的能量值（0~1之间）
         local barWidth = fftArray[i] * WINDOW.nowW

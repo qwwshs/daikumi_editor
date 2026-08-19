@@ -1,4 +1,5 @@
 local menuUI = {}
+local ChartService = require("src.services.chartService")
 
 menuUI.chartTool = {}
 
@@ -21,16 +22,15 @@ menuUI.chartTool[#menuUI.chartTool].func = function()
         return
     end
     log("load chart:",menu.chartInfo.chart_name[menu.selectChartPos].path)
-    setmetatable(chart,meta_chart)
 
     menu('toedit')
 
-    chart:load() --初始化
+    ChartService:load() --初始化（构建 extra_chart 索引）
     time.nowtime = 0
     beat.nowbeat = 0
     music_data = love.sound.newSoundData(menu.musicPath)
     room:to('edit')
-    love.window.setTitle(chart.info.song_name.."-"..chart.info.chart_name)
+    love.window.setTitle(ChartService:getInfoField('song_name').."-"..ChartService:getInfoField('chart_name'))
 end
 
 menuUI.chartTool[#menuUI.chartTool + 1] = {type = 'button',text = 'new chart'}

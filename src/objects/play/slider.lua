@@ -1,4 +1,5 @@
 local slider = object:new('slider')
+local ChartService = require("src.services.chartService")
 local layout = require 'config.layouts.play'
 slider.now_y = layout.slider.y + layout.slider.h --现在所在y位置
 slider.x = layout.slider.x
@@ -30,7 +31,7 @@ function slider:update(dt)
         music_play = false
         self.now_y = y1
         time.nowtime = -(self.now_y - self.y - self.h) / self.h * time.alltime
-        beat.nowbeat = beat:toBeat(chart.bpm_list, time.nowtime)
+        beat.nowbeat = ChartService:toBeat(time.nowtime)
         if Nui:windowBegin("slider", self.x, self.y,0,0,'background') then
             Nui:tooltip("nowtime" .. ":" .. math.roundToPrecision(time.nowtime, 100) .. " " .. "beat" .. ":" .. math.roundToPrecision(beat.nowbeat, 100))
         end

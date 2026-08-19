@@ -1,4 +1,5 @@
 --events界面
+local ChartService = require("src.services.chartService")
 local Gevents = group:new('events')
 Gevents.type = "events"
 Gevents.layout = require 'config.layouts.sidebar'.events
@@ -72,27 +73,31 @@ function Gevents:transDo() --写出表达式
     end
 end
 function Gevents:eventsDo() --执行
+    if not ctrl then return end
     local copy_table = ctrl:get_copy()
     for i = 1,#copy_table.event do
-        for k = 1,#chart.event do
-            if table.eq(copy_table.event[i],chart.event[k]) then
+        for k = 1, ChartService:getEventCount() do
+            if copy_table.event[i] == ChartService:getEvent(k) then
                 local ok,err = pcall(function() local a = self.expression(1) end)
                 if not ok then --处理错误的表达式
                     self.expression = function(x) return x end
                     log('expression error:',err)
                 end
+                local ce = copy_table.event[i]
                 local from_to_random = math.random(-self.perturbation,self.perturbation)
-                copy_table.event[i].from = copy_table.event[i].from + from_to_random + self.from + 
+                local new_from = ce:getFrom() + from_to_random + self.from +
                 ((self.to - self.from) *
-                self.expression(((beat:get(copy_table.event[i].beat) - beat:get(copy_table.event[1].beat))/
-                (beat:get(copy_table.event[#copy_table.event].beat2) - beat:get(copy_table.event[1].beat) ) )) )--一起修改 保证copy_tab与chart的event一致
-                
-                copy_table.event[i].to = copy_table.event[i].to + from_to_random + self.from +
+                self.expression(((ce:getBeatValue() - copy_table.event[1]:getBeatValue())/
+                (copy_table.event[#copy_table.event]:getBeat2Value() - copy_table.event[1]:getBeatValue()) )) )--一起修改 保证copy_tab与chart的event一致
+
+                local new_to = ce:getTo() + from_to_random + self.from +
                 ((self.to - self.from) *
-                self.expression(((beat:get(copy_table.event[i].beat2) - beat:get(copy_table.event[1].beat))/
-                (beat:get(copy_table.event[#copy_table.event].beat2) - beat:get(copy_table.event[1].beat) ))) )
-                chart.event[k].from = copy_table.event[i].from
-                chart.event[k].to = copy_table.event[i].to
+                self.expression(((ce:getBeat2Value() - copy_table.event[1]:getBeatValue())/
+                (copy_table.event[#copy_table.event]:getBeat2Value() - copy_table.event[1]:getBeatValue()) )) )
+                ce:setFrom(new_from)
+                ce:setTo(new_to)
+                ChartService:getEvent(k):setFrom(new_from)
+                ChartService:getEvent(k):setTo(new_to)
             end
         end
     end

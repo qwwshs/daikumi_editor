@@ -1,0 +1,185 @@
+--[[
+    模块名: redo
+    描述: 撤销/重做管理模块
+    作者: qwwshs
+    依赖: object, chart, ChartService, event_type, fNote, fEvent, sidebar, input
+
+    实现了基于操作记录的撤销/重做系统。
+    每次操作记录包含 add 和 del 两个分组，每个分组包含 note 和 event 两个列表。
+    撤销时：将 add 的元素删除，将 del 的元素恢复。
+    重做时：将 add 的元素恢复，将 del 的元素删除。
+]]
+
+local ChartService = require("src.services.chartService")
+local Note = require("src.objects.Note")
+local Event = require("src.objects.Event")
+
+local redo = object:new('redo')
+
+--- 深拷贝可能包含 Note/Event 对象的表
+local function deepCopyWithNotes(tab)
+    if tab._data then return tab:copy() end
+    local result = {}
+    for k, v in pairs(tab) do
+        if type(v) == 'table' then
+            if v._data then
+                result[k] = v:copy()
+            else
+                result[k] = deepCopyWithNotes(v)
+            end
+        else
+            result[k] = v
+        end
+    end
+    return result
+end
+
+--- 撤销操作栈
+redo.revoke = {}
+
+--- 重做操作栈
+redo.redo = {}
+
+--- 从谱面删除元素列表（通过 ChartService 自动同步 extra_chart）
+-- @tparam table list 要删除的元素列表
+-- @tparam function deleteFunc 删除函数 (ChartService:deleteNote 或 ChartService:deleteEvent)
+local function removeFromChart(list, deleteFunc)
+    for _, item in ipairs(list) do
+        deleteFunc(ChartService, item)
+    end
+end
+
+--- 向谱面添加元素列表（通过 ChartService 自动同步 extra_chart）
+-- @tparam table list 要添加的元素列表
+-- @tparam function addFunc 添加函数 (ChartService:addNote 或 ChartService:addEvent)
+local function addToChart(list, addFunc)
+    for _, item in ipairs(list) do
+        if item._data and type(item.copy) == "function" then
+            addFunc(ChartService, item:copy())
+        elseif item._data then
+            -- Plain table with _data (from serialization), reconstruct as proper object
+            local typeName = item._data.type or item.type
+            local isEvent = table.find(event_type, typeName)
+            if isEvent then
+                addFunc(ChartService, Event.new(item._data))
+            else
+                addFunc(ChartService, Note.new(item._data))
+            end
+        else
+            -- Legacy plain table format
+            local typeName = item.type
+            local isEvent = table.find(event_type, typeName)
+            if isEvent then
+                addFunc(ChartService, Event.new(item))
+            else
+                addFunc(ChartService, Note.new(item))
+            end
+        end
+    end
+end
+
+--- 对 chart 执行批量操作（撤销或重做）
+-- @tparam table operation 操作记录 {add={note={}, event={}}, del={note={}, event={}}}
+-- @tparam boolean isUndo true 表示撤销（反转操作），false 表示重做（重放操作）
+local function applyOperation(operation, isUndo)
+    if isUndo then
+        -- 撤销：先删除 add 的，再恢复 del 的
+        removeFromChart(operation.add.note, ChartService.deleteNote)
+        removeFromChart(operation.add.event, ChartService.deleteEvent)
+        addToChart(operation.del.note, ChartService.addNote)
+        addToChart(operation.del.event, ChartService.addEvent)
+    else
+        -- 重做：先恢复 add 的，再删除 del 的
+        addToChart(operation.add.note, ChartService.addNote)
+        addToChart(operation.add.event, ChartService.addEvent)
+        removeFromChart(operation.del.note, ChartService.deleteNote)
+        removeFromChart(operation.del.event, ChartService.deleteEvent)
+    end
+
+    fNote:sort()
+    fEvent:sort()
+    sidebar:to("nil")
+end
+
+--- 写入撤销记录
+-- @tparam table tab 操作数据，可以是：
+--   1. 单个 Note/Event 对象（需配合 istype 参数）
+--   2. 批量操作表 {add={note={}, event={}}, del={note={}, event={}}}
+-- @tparam string istype 操作类型 ("add" 或 "del")，仅对单个元素有效
+function redo:writeRevoke(tab, istype)
+    local revoke_tab
+
+    if tab._data and type(tab.copy) == "function" then
+        -- 单个 Note 或 Event 对象，封装为标准操作格式
+        revoke_tab = {
+            add = { event = {}, note = {} },
+            del = { event = {}, note = {} }
+        }
+        local typeName = tab:getType()
+        local isEvt = table.find(event_type, typeName)
+        if isEvt then
+            if istype == 'add' then
+                table.insert(revoke_tab.add.event, tab:copy())
+            elseif istype == 'del' then
+                table.insert(revoke_tab.del.event, tab:copy())
+            end
+        else
+            if istype == 'add' then
+                table.insert(revoke_tab.add.note, tab:copy())
+            elseif istype == 'del' then
+                table.insert(revoke_tab.del.note, tab:copy())
+            end
+        end
+    elseif tab.type then
+        -- 单个 event 元素（纯 table，兼容旧数据），封装为标准操作格式
+        revoke_tab = {
+            add = { event = {}, note = {} },
+            del = { event = {}, note = {} }
+        }
+        local isEventType = table.find(event_type, tab.type)
+        if isEventType then
+            if istype == 'add' then
+                table.insert(revoke_tab.add.event, table.copy(tab))
+            elseif istype == 'del' then
+                table.insert(revoke_tab.del.event, table.copy(tab))
+            end
+        end
+    else
+        -- 批量操作，直接深拷贝
+        revoke_tab = deepCopyWithNotes and deepCopyWithNotes(tab) or table.copy(tab)
+    end
+
+    -- 新操作会清空重做栈
+    self.redo = {}
+    table.insert(self.revoke, revoke_tab)
+end
+
+--- 键盘事件处理：执行撤销或重做
+-- @tparam string key 按下的键名
+function redo:keypressed(key)
+    if input('undo') and self.revoke[#self.revoke] then
+        -- 撤销操作
+        local operation = self.revoke[#self.revoke]
+        self.redo[#self.redo + 1] = operation
+        applyOperation(operation, true)
+        table.remove(self.revoke)
+
+    elseif input('redoing') and self.redo[#self.redo] then
+        -- 重做操作
+        local operation = self.redo[#self.redo]
+        self.revoke[#self.revoke + 1] = operation
+        applyOperation(operation, false)
+        table.remove(self.redo)
+    end
+end
+
+-- 注册为插件
+if PluginManager then
+    PluginManager:register({
+        name = "redo",
+        version = "1.0.0",
+        description = "撤销/重做管理",
+    })
+end
+
+return redo

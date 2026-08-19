@@ -1,4 +1,5 @@
 local denom = object:new('denom')
+local ChartService = require("src.services.chartService")
 denom.scale = 1
 denom.denom = 4
 denom.type = 'custom'
@@ -49,7 +50,7 @@ function denom:wheelmovedInPlay(x, y)
     end
     beat.nowbeat = math.floor(beat.nowbeat) + min_denom / self.denom     --更正位置
 
-    time.nowtime = beat:toTime(chart.bpm_list, beat.nowbeat)
+    time.nowtime = ChartService:toTime(beat.nowbeat)
     music_play = false
 end
 

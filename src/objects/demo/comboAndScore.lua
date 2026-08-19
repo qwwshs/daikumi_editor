@@ -1,4 +1,5 @@
 local comboAndScore = object:new('comboAndScore') --连击与分数显示
+local ChartService = require("src.services.chartService")
 comboAndScore.scoreLayout = require 'config.layouts.demo'.score
 comboAndScore.comboLayout = require 'config.layouts.demo'.score.combo
 comboAndScore.combo = '0'
@@ -23,9 +24,10 @@ function comboAndScore:opened()
     previous_frame_starting_point = 1
 
     --算真note数量
-    for i, n in ipairs(chart.note) do
-        local _,w = fEvent:get(n.track,beat:get(n.beat))
-        if n.fake == 0 and w ~= 0 then
+    for i = 1, ChartService:getNoteCount() do
+        local n = ChartService:getNote(i)
+        local _,w = fEvent:get(n:getTrack(), n:getBeatValue())
+        if not n:isFakeNote() and w ~= 0 then
             allTrueNote = allTrueNote + 1
         end
     end
@@ -36,13 +38,14 @@ function comboAndScore:update(dt)
         return
     end
     previous_frame_beat = beat.nowbeat
-    for i = math.max(previous_frame_starting_point,1),#chart.note do
-        local n = chart.note[i]
-        local _,w = fEvent:get(n.track,beat:get(n.beat))
-        if beat:get(n.beat) < beat.nowbeat and n.fake == 0 and w ~= 0 then
+    for i = math.max(previous_frame_starting_point,1), ChartService:getNoteCount() do
+        local n = ChartService:getNote(i)
+        local beatVal = n:getBeatValue()
+        local _,w = fEvent:get(n:getTrack(), beatVal)
+        if beatVal < beat.nowbeat and not n:isFakeNote() and w ~= 0 then
             combo = combo + 1
         end
-        if beat:get(n.beat) > beat.nowbeat then
+        if beatVal > beat.nowbeat then
             previous_frame_starting_point = i
             break
         end

@@ -1,5 +1,6 @@
 local layout         = require 'config.layouts.menu' --菜单布局
 local colors         = require 'config.colors.menu'  --菜单颜色
+local ChartService   = require("src.services.chartService") --谱面数据服务
 local file_extension = {
     music = { 'mp3', 'ogg', 'wav' },
     chart = { 'json' },
@@ -98,7 +99,6 @@ function menu:select_music()
                     info = {}
                 end
                 table.fill(info, meta_chart.__index)
-                table.fill(chart, meta_chart.__index)
                 menu.chartInfo.song_name = info.info.song_name
                 menu.chartInfo.chart_name[#menu.chartInfo.chart_name + 1] = {
                     name = info.info.chart_name,
@@ -106,8 +106,7 @@ function menu:select_music()
                     is_true_chart = is_true_chart
                 }
                 if menu.selectChartPos == #menu.chartInfo.chart_name then
-                    chart = table.copy(info)        --读取谱面
-                    setmetatable(chart, meta_chart) --防谱报废
+                    ChartService:setChart(info)     --读取谱面（内部深拷贝并补默认字段）
                 end
             end
             if table.find(file_extension.bg, getFileExtension(v)) then --bg
@@ -130,7 +129,6 @@ function menu:select_music()
                 end
             end
         end
-        table.fill(chart, meta_chart.__index)
         for i, v in ipairs(file_tab) do                                   --因为一些数据在chart里面 所以分开读
             local v_extemsion = getFileExtension(v)
             if table.find(file_extension.music, getFileExtension(v)) then --歌曲
@@ -144,8 +142,8 @@ function menu:select_music()
                     --读取音频信息
                     music = menu.chartInfo.song
                     menu.musicPath = now_file_path .. v
-                    time.alltime = music:getDuration() + chart.offset / 1000
-                    beat.allbeat = beat:toBeat(chart.bpm_list, time.alltime)
+                    time.alltime = music:getDuration() + ChartService:getOffset() / 1000
+                    beat.allbeat = ChartService:toBeat(time.alltime)
                 else
                     log("music file error")
                     menu.chartInfo.song = nil
@@ -193,7 +191,7 @@ function menu:load()
 end
 
 function menu:draw()
-    love.graphics.setColor(colors.line1)
+    love.graphics.setColor(colors.white_fade)
     --装饰网格
     for i = 0, 74 do
         love.graphics.rectangle('fill', i * 25, 0, 1, WINDOW.h)
@@ -249,20 +247,20 @@ function menu:update(dt)
     --更新music时间
     if menu.chartInfo.song then
         time.nowtime = time.nowtime + dt
-        beat.nowbeat = beat:toBeat(chart.bpm_list, time.nowtime)
+        beat.nowbeat = ChartService:toBeat(time.nowtime)
     else
         time.nowtime = 0
     end
-    if chart and chart.bpm_list and #chart.bpm_list > 0 then
-        beat.nowbeat = beat:toBeat(chart.bpm_list, time.nowtime)
+    if ChartService:getBpmCount() > 0 then
+        beat.nowbeat = ChartService:toBeat(time.nowtime)
     end
-    if chart and chart.bpm_list and #chart.bpm_list > 0 and math.floor(beat.nowbeat) ~= beat_last then
+    if ChartService:getBpmCount() > 0 and math.floor(beat.nowbeat) ~= beat_last then
         bg_animation.now.alpha = bg_animation.st2.alpha
         beat_last = math.floor(beat.nowbeat)
         if flesh_st then
             timer.tween(
-            beat:toTime(chart.bpm_list, math.floor(beat.nowbeat) + 1) -
-            beat:toTime(chart.bpm_list, math.floor(beat.nowbeat)), bg_animation.now, bg_animation.ed2,
+            ChartService:toTime(math.floor(beat.nowbeat) + 1) -
+            ChartService:toTime(math.floor(beat.nowbeat)), bg_animation.now, bg_animation.ed2,
                 bg_animation.trans2)
         end
     end
@@ -328,11 +326,10 @@ function menu:filedropped(file) -- 文件拖入
         nativefs.newFile(now_file_path .. json_name)                                            --复制到当前文件夹下
 
         --更新谱面格式
-        chart = loadstring('return ' .. content)()
-        setmetatable(chart, meta_chart)
-        chart:update()
+        ChartService:setChart(loadstring('return ' .. content)())
+        ChartService:update()
         log(nativefs.write(now_file_path .. json_name,
-            dkjson.encode(chart)))                                              --复制到新的文件夹
+            ChartService:encodeJson()))                                              --复制到新的文件夹
     elseif table.find(file_extension.music, isfile_extension) then              --音频文件
         --创建新文件夹
         local path_name = flie_name                                             --文件夹名
@@ -359,4 +356,4 @@ end
 
 menu:addObject(require 'src.objects.menu.select_music')
 menu:addObject(require 'src.objects.menu.select_chart')
-menu:addObject(require 'src.objects.menu.FFT')
+menu:addObject(require 'plugins.fft')    -- 插件化：FFT 频谱分析器

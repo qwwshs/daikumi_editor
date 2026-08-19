@@ -1,4 +1,6 @@
 local play = group:new('play')
+local ChartService = require("src.services.chartService")
+local CoordinateService = require("src.services.coordinateService")
 play.now_all_track_pos = {} --现在所有轨道的属性
 play.effect = {
     note_alpha = 100,
@@ -58,11 +60,11 @@ function play:update(dt)
         track_line_alpha = false,
         note_rotate = false,
     }
-    for i = #chart.effect, 1, -1 do              --倒着减小计算量
+    for i = ChartService:getEffectCount(), 1, -1 do              --倒着减小计算量
         if not table.find(effect_ed, false) then --计算完成
             break
         end
-        local iseffect = chart.effect[i]
+        local iseffect = ChartService:getEffect(i)
         local beat1 = iseffect.beat
         local beat2 = iseffect.beat2
         if iseffect then
@@ -116,26 +118,27 @@ function play:draw()
     self('draw')
 
     love.graphics.setColor(1, 1, 1) --总 note event 数
-    local str = 'note: ' .. #chart.note .. '  event: ' .. #chart.event
+    local str = 'note: ' .. ChartService:getNoteCount() .. '  event: ' .. ChartService:getEventCount()
     love.graphics.printf(str, self.layout.demo.x, settings.judge_line_y + 60, self.layout.demo.w, "center")
 
     --event渲染 于demo侧
     for _, eventType in pairs(event_type) do
         love.graphics.setColor(self.colors.eventInDemo[eventType])
-        if not extra_chart.track[track.track] then
+        if not ChartService:hasTrack(track.track) then
             print(track.track)
             break
         end
-        for i = #extra_chart.track[track.track][eventType], 1, -1 do
-            local isevent = extra_chart.track[track.track][eventType][i]
-            local y = beat:toY(isevent.beat)
-            local y2 = beat:toY(isevent.beat2)
+        local eventCount = ChartService:getTrackEventCount(track.track, eventType)
+        for i = eventCount, 1, -1 do
+            local isevent = ChartService:getTrackEvent(track.track, eventType, i)
+            local y = CoordinateService:toY(isevent:getBeat())
+            local y2 = CoordinateService:toY(isevent:getBeat2())
             if not (y2 > WINDOW.h or y < 0) then
                 -- beizer曲线
                 for k = 1, 100 do
-                    local nowx = fTrack:to_play_track_x(isevent.from) +
+                    local nowx = fTrack:to_play_track_x(isevent:getFrom()) +
                         fEvent:getTrans(isevent, k / 100) *
-                        (fTrack:to_play_track_x(isevent.to) - fTrack:to_play_track_x(isevent.from))
+                        (fTrack:to_play_track_x(isevent:getTo()) - fTrack:to_play_track_x(isevent:getFrom()))
                     local nowy = y + (y2 - y) * k / 100
                     love.graphics.rectangle("fill", nowx, nowy - (y2 - y) / 100, 5, (y2 - y) / 100) --减去一个 (y2 - y)/10是为了与头对齐
                 end
@@ -146,17 +149,19 @@ function play:draw()
     end
 
     --栅栏绘制
-    local track_start_x = fTrack:to_play_track(-chart.preference.x_offset, 0)
-    local track_end_x = fTrack:to_play_track(-chart.preference.x_offset + chart.preference.event_scale, 0)
+    local x_offset = ChartService:getPreferenceField('x_offset')
+    local event_scale = ChartService:getPreferenceField('event_scale')
+    local track_start_x = fTrack:to_play_track(-x_offset, 0)
+    local track_end_x = fTrack:to_play_track(-x_offset + event_scale, 0)
     local track_width = track_end_x - track_start_x
 
-    love.graphics.setColor(self.colors.fence)
+    love.graphics.setColor(self.colors.white_half)
     for i = 1, track.fence do
         love.graphics.rectangle("fill", track_start_x + track_width / track.fence * i, self.layout.demo.y,
             2, self.layout.demo.h)
     end
     if track_width / track.fence * fTrack:track_get_near_fence() < track_width then
-        love.graphics.setColor(self.colors.nearFence)
+        love.graphics.setColor(self.colors.cyan_bright)
         love.graphics.rectangle("fill", track_start_x + track_width / track.fence * fTrack:track_get_near_fence(),
             self.layout.demo.y, 2, self.layout.demo.h)
     end
@@ -186,15 +191,16 @@ function play:mousepressed(x, y, button, istouch, presses)
     if self:mouseInDemo() and love.mouse.isDown(1) and not directEventEditing.open then -- 选择轨道 在demo区域
         messageBox:add("track click")
         local local_track = {}
-        for i = 1, #chart.event do                                   --点击轨道进入轨道的编辑事件
-            if not table.find(local_track, chart.event[i].track) then --不存在 记录
-                local track_x, track_w = fEvent:get(chart.event[i].track, beat.nowbeat)
+        for i = 1, ChartService:getEventCount() do                                   --点击轨道进入轨道的编辑事件
+            local e = ChartService:getEvent(i)
+            if not table.find(local_track, e:getTrack()) then --不存在 记录
+                local track_x, track_w = fEvent:get(e:getTrack(), beat.nowbeat)
                 track_x, track_w = fTrack:to_play_track(track_x, track_w)
                 if math.intersect(x, x, track_x, track_w + track_x) then
-                    local_track[#local_track + 1] = chart.event[i].track
+                    local_track[#local_track + 1] = e:getTrack()
                 end
             end
-            if beat:get(chart.event[i].beat) > beat.nowbeat then
+            if e:getBeatValue() > beat.nowbeat then
                 break
             end
         end
@@ -233,13 +239,13 @@ play:addObject(require 'src.objects.play.demoInEdit')
 play:addObject(require 'src.objects.play.denomPlay')
 play:addObject(require 'src.objects.play.demoNowX')
 play:addObject(require 'src.objects.play.slider')
-redo = require('src/objects/play/redo')
+redo = require('plugins.redo')
 play:addObject(redo)
-play:addObject(require 'src.objects.play.alt')
-ctrl = require('src.objects.play.ctrl')
+play:addObject(require 'plugins.alt')
+ctrl = require('plugins.ctrl')
 play:addObject(ctrl)
 hit = require 'src.objects.play.hit'
 play:addObject(hit)
-directEventEditing = require 'src.objects.play.directEventEditing'
+directEventEditing = require 'plugins.directEventEditing'
 play:addObject(directEventEditing)
 return play

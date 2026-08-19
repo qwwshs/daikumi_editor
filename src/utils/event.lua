@@ -1,237 +1,358 @@
+--[[
+    模块名: event (fEvent)
+    描述: 事件处理模块，负责事件的查询、放置、删除、排序和过渡计算
+    作者: qwwshs
+    依赖: object, beat, easings, bezier, ChartService, sidebar, track, denom, transIndex
+
+    核心功能:
+    - event:get(): 获取指定轨道在指定 beat 处的事件值（x, w, lpos, rpos）
+    - event:click(): 点击选择事件
+    - event:delete(): 删除事件
+    - event:place(): 放置事件（支持长按放置头/尾）
+    - event:sort(): 对事件列表排序
+    - event:getTrans(): 计算事件的过渡值
+]]
+
 local event = object:new('event')
-local bezier_file = io.open("defaultBezier.txt", "r") -- 以只读模式打开文件
+local ChartService = require("src.services.chartService")
+local Event = require("src.objects.Event")
+local CoordinateService = require("src.services.coordinateService")
+
+-- ============================================================
+-- 贝塞尔曲线预设加载（仅此处加载一次，其他模块通过 fEvent.bezier 访问）
+-- ============================================================
+local bezier_file = io.open("defaultBezier.txt", "r")
 if bezier_file then
-    local content = bezier_file:read("*a")            -- 读取整个文件内容
-    bezier_file:close()                               -- 关闭文件
+    local content = bezier_file:read("*a")
+    bezier_file:close()
     event.bezier = loadstring("return " .. content)()
 end
 if type(event.bezier) ~= "table" then
     event.bezier = {}
 end
 
-event.local_event = {}   -- 局部event表
-event.hold_type = 0      --长条状态 0没放 1头 2尾
-event.__index = meta_event.__index
-function event:cleanUp() --长条清除
+--- 局部 event 表（放置长按事件时的临时数据）
+event.local_event = {}
+
+--- 长条放置状态: 0=未放置, 1=已放头, 2=已放尾
+event.hold_type = 0
+
+-- ============================================================
+-- 辅助函数
+-- ============================================================
+
+--- 清除长按事件的临时状态
+function event:cleanUp()
     event.local_event = {}
     event.hold_type = 0
 end
 
+--- 计算事件的过渡值
+-- @tparam Event isevent 事件对象
+-- @tparam number t 过渡进度 (0~1)
+-- @treturn number 过渡后的值
 function event:getTrans(isevent, t)
     t = math.min(math.max(t, 0), 1)
-    if isevent.trans.type == 'bezier' then
-        return bezier(0, 1, 0, 1, isevent.trans.trans, t)
-    elseif isevent.trans.type == 'easings' then
-        return easings[isevent.trans.easings](t)
+    if isevent:getTransType() == 'bezier' then
+        return bezier(0, 1, 0, 1, isevent:getTransData(), t)
+    elseif isevent:getTransType() == 'easings' then
+        return easings[isevent:getEasings()](t)
     else
         return 1
     end
 end
 
-local event_ed = {
-    x = false,
-    w = false,
-    lpos = false,
-    rpos = false
-}
-function event:get(istrack, isbeat, original, parent_tab) --得到event此时的宽和高
-    local original = original or false                    --是否获得原值（不进行lrpos转换）
-    local parent_tab = parent_tab or {}                   --父轨道表 递归时传入
-    local return_x = 0                                    --因为加了lrpos 所以分开来算
-    local return_w = 0
+--- 在事件列表中查找与指定区间重叠的事件
+-- 公共函数，消除 click 和 delete 中的重复逻辑
+-- @tparam string eventType 事件类型 ("x", "w", "lpos", "rpos")
+-- @tparam number pos 屏幕 Y 坐标
+-- @tparam number trackId 轨道 ID（可选，默认为当前轨道）
+-- @treturn number|nil 找到的事件索引，未找到返回 nil
+-- @treturn table|nil 找到的事件数据
+local function findEventInRange(eventType, pos, trackId)
+    trackId = trackId or track.track
+    local pos_interval = 20 * math.min(denom.scale, 1)
+    local event_beat_up = CoordinateService:yToBeat(pos - pos_interval)
+    local event_beat_down = CoordinateService:yToBeat(pos + pos_interval)
+
+    for i = 1, ChartService:getEventCount() do
+        local isevent = ChartService:getEvent(i)
+        local beat1 = isevent:getBeatValue()
+        local beat2 = isevent:getBeat2Value() or beat1
+        if isevent:getType() == eventType and isevent:getTrack() == trackId and
+            math.intersect(beat1, beat2, event_beat_down, event_beat_up) then
+            return i, isevent
+        end
+    end
+    return nil, nil
+end
+
+-- ============================================================
+-- 从 extra_chart 获取事件值（快速路径）
+-- ============================================================
+
+--- 从 extra_chart 索引中查找指定类型的事件值
+-- @tparam number istrack 轨道 ID
+-- @tparam string istype 事件类型
+-- @tparam number isbeat 目标 beat 值
+-- @treturn table {值, beat, type}
+local function getValueFromExtraChart(istrack, istype, isbeat)
+    local result = {0, beat = 0, type = istype}
+    local eventCount = ChartService:getTrackEventCount(istrack, istype)
+    if eventCount == 0 then
+        return result
+    end
+
+    for i = eventCount, 1, -1 do
+        local isevent = ChartService:getTrackEvent(istrack, istype, i)
+        local beat1 = isevent:getBeatValue()
+        local beat2 = isevent:getBeat2Value() or beat1
+        if (beat1 <= isbeat and beat2 > isbeat) or beat2 <= isbeat then
+            local value = isevent:getFrom() +
+                (isevent:getTo() - isevent:getFrom()) * event:getTrans(isevent, (isbeat - beat1) / (beat2 - beat1))
+            result = {value, beat = beat2, type = istype}
+            if beat2 >= isbeat then
+                result.beat = isbeat
+            end
+            return result
+        end
+    end
+    return result
+end
+
+-- ============================================================
+-- 从 chart 直接遍历获取事件值（慢速路径，extra_chart 缺失时使用）
+-- ============================================================
+
+--- 从 chart.event 中遍历查找指定类型的事件值
+-- @tparam number istrack 轨道 ID
+-- @tparam string istype 事件类型
+-- @tparam number isbeat 目标 beat 值
+-- @treturn table {值, beat, type}
+local function getValueFromChart(istrack, istype, isbeat)
+    local result = {0, beat = 0, type = istype}
+    for i = ChartService:getEventCount(), 1, -1 do
+        local isevent = ChartService:getEvent(i)
+        if isevent:getTrack() == istrack and isevent:getType() == istype then
+            local beat1 = isevent:getBeatValue()
+            local beat2 = isevent:getBeat2Value() or beat1
+            if (beat1 <= isbeat and beat2 > isbeat) or beat2 <= isbeat then
+                local value = isevent:getFrom() +
+                    (isevent:getTo() - isevent:getFrom()) * event:getTrans(isevent, (isbeat - beat1) / (beat2 - beat1))
+                result = {value, beat = beat2, type = istype}
+                return result
+            end
+        end
+    end
+    return result
+end
+
+-- ============================================================
+-- lrpos 到 xw 的转换
+-- ============================================================
+
+--- 将 x, w, lpos, rpos 四个值合并为最终的 x, w
+-- 根据可用的事件类型组合，计算出轨道的 x 坐标和宽度
+-- @tparam table now 包含 x, w, lpos, rpos 四个值的表
+-- @treturn number x 轨道 x 坐标
+-- @treturn number w 轨道宽度
+local function mergeEventValues(now)
+    -- 按 beat 大小排序，取最近的两项
+    local sorted = {now.x, now.w, now.lpos, now.rpos}
+    table.sort(sorted, function(a, b) return a.beat > b.beat end)
+
+    local temp = {}
+    temp[sorted[1].type] = sorted[1]
+    temp[sorted[2].type] = sorted[2]
+
+    local return_x, return_w = 0, 0
+
+    if temp.x and temp.w then
+        return_x = temp.x[1]
+        return_w = temp.w[1]
+    elseif temp.lpos and temp.rpos then
+        return_x = (temp.lpos[1] + temp.rpos[1]) / 2
+        return_w = temp.rpos[1] - temp.lpos[1]
+    elseif temp.x and temp.lpos then
+        return_x = temp.x[1]
+        return_w = (temp.x[1] - temp.lpos[1]) * 2
+    elseif temp.x and temp.rpos then
+        return_x = temp.x[1]
+        return_w = (temp.rpos[1] - temp.x[1]) * 2
+    elseif temp.w and temp.rpos then
+        return_x = temp.rpos[1] - temp.w[1] / 2
+        return_w = temp.w[1]
+    elseif temp.w and temp.lpos then
+        return_x = temp.lpos[1] + temp.w[1] / 2
+        return_w = temp.w[1]
+    end
+
+    return return_x, return_w
+end
+
+-- ============================================================
+-- 公共 API
+-- ============================================================
+
+--- 获取指定轨道在指定 beat 处的事件值
+-- 优先从 extra_chart 索引查询（快速路径），缺失时从 chart 遍历（慢速路径）
+-- 支持父轨道递归计算
+-- @tparam number istrack 轨道 ID
+-- @tparam number isbeat beat 值
+-- @tparam bool original 是否获取原值（不进行父轨道 lrpos 转换）
+-- @tparam table parent_tab 父轨道递归记录表（内部使用，防止死循环）
+-- @treturn number x 轨道 x 坐标
+-- @treturn number w 轨道宽度
+function event:get(istrack, isbeat, original, parent_tab)
+    original = original or false
+    parent_tab = parent_tab or {}
+
     local now = {
-        x = {0,beat = 0,type = "x"},
-        w = {0,beat = 0,type = "w"},
-        lpos = {0,beat = 0,type = "lpos"},
-        rpos = {0,beat = 0,type = "rpos"},
+        x = {0, beat = 0, type = "x"},
+        w = {0, beat = 0, type = "w"},
+        lpos = {0, beat = 0, type = "lpos"},
+        rpos = {0, beat = 0, type = "rpos"},
     }
 
-    if extra_chart.track[istrack] then
-        --从extra_chart里找event
-        local function getNumAndBeat(istype)
-            for i = #extra_chart.track[istrack][istype], 1, -1 do
-                local isevent = extra_chart.track[istrack][istype][i]
-                local beat1 = beat:get(isevent.beat)
-                local beat2 = beat:get(isevent.beat2) or beat1
-                if ((beat1 <= isbeat and beat2 > isbeat) or beat2 <= isbeat) then
-                    now[istype] = {isevent.from +
-                        (isevent.to - isevent.from) * self:getTrans(isevent, (isbeat - beat1) / (beat2 - beat1)), beat = beat2, type = istype}
-                    if beat2 >= isbeat then
-                        now[istype].beat = isbeat
-                    end
-                    return
-                end
-            end
-        end
-
-        getNumAndBeat("x")
-        getNumAndBeat("w")
-        getNumAndBeat("lpos")
-        getNumAndBeat("rpos")
-    else        --缺少索引
-
-        event_ed.x = false
-        event_ed.w = false
-        event_ed.lpos = false
-        event_ed.rpos = false
-        for i = #chart.event, 1, -1 do              --倒着减小计算量
-            if not table.find(event_ed, false) then --计算完成
-                break
-            end
-            if chart.event[i].track == istrack then
-                local beat1 = beat:get(chart.event[i].beat)
-                local beat2 = beat:get(chart.event[i].beat2) or beat1
-                local isevent = chart.event[i]
-                if ((beat1 <= isbeat and beat2 > isbeat) or beat2 <= isbeat) and not event_ed[isevent.type] then
-                    now[isevent.type][1] = isevent.from +
-                        (isevent.to - isevent.from) * self:getTrans(isevent, (isbeat - beat1) / (beat2 - beat1))
-                    event_ed[isevent.type] = true
-                end
-            end
-        end
-        print('old')
+    -- 获取四种类型的事件值
+    if ChartService:hasTrack(istrack) then
+        -- 快速路径：从 extra_chart 索引查询
+        now.x = getValueFromExtraChart(istrack, "x", isbeat)
+        now.w = getValueFromExtraChart(istrack, "w", isbeat)
+        now.lpos = getValueFromExtraChart(istrack, "lpos", isbeat)
+        now.rpos = getValueFromExtraChart(istrack, "rpos", isbeat)
+    else
+        -- 慢速路径：从 chart 遍历查询
+        now.x = getValueFromChart(istrack, "x", isbeat)
+        now.w = getValueFromChart(istrack, "w", isbeat)
+        now.lpos = getValueFromChart(istrack, "lpos", isbeat)
+        now.rpos = getValueFromChart(istrack, "rpos", isbeat)
     end
-    local track_info = fTrack:get_track_info(istrack)
-    --将now里的元素按照beat大小排序
-    --转换now表为数组以排序
-    now = {now.x, now.w, now.lpos, now.rpos}
-    --找x，w，lpos，rpos的beat中最小的两项
 
-    table.sort(now, function(a, b) return a.beat > b.beat end)
-    local temp_tab = {}
-    temp_tab[now[1].type] = now[1]
-    temp_tab[now[2].type] = now[2]
-    if temp_tab.x and temp_tab.w then
-        return_x = temp_tab.x[1]
-        return_w = temp_tab.w[1]
-    elseif temp_tab.lpos and temp_tab.rpos then
-        return_x = (temp_tab.lpos[1] + temp_tab.rpos[1]) / 2
-        return_w = temp_tab.rpos[1] - temp_tab.lpos[1]
-    elseif temp_tab.x and temp_tab.lpos then
-        return_x = temp_tab.x[1]
-        return_w = (temp_tab.x[1] - temp_tab.lpos[1]) * 2
-    elseif temp_tab.x and temp_tab.rpos then
-        return_x = temp_tab.x[1]
-        return_w = (temp_tab.rpos[1] - temp_tab.x[1]) * 2
-    elseif temp_tab.w and temp_tab.rpos then
-        return_x = temp_tab.rpos[1] - temp_tab.w[1] / 2
-        return_w = temp_tab.w[1]
-    elseif temp_tab.w and temp_tab.lpos then
-        return_x = temp_tab.lpos[1] + temp_tab.w[1] / 2
-        return_w = temp_tab.w[1]
-    end
+    -- 合并四种类型的值为 x, w
+    local return_x, return_w = mergeEventValues(now)
+
+    -- 处理父轨道递归
     if not original then
-        if track_info.parent ~= 0 then            --有父轨道
-           parent_tab[istrack] = true              --记录父轨道 避免重复计算
-            if parent_tab[track_info.parent] then --父轨道在递归中已经计算过了 避免死循环
-                return return_x,return_w
+        local parent_track = ChartService:getTrackField(istrack, 'parent')
+        local scale_with_parent = ChartService:getTrackField(istrack, 'scale_with_parent')
+        if parent_track ~= 0 then
+            parent_tab[istrack] = true
+            -- 防止循环引用导致死循环
+            if parent_tab[parent_track] then
+                return return_x, return_w
             end
-            local parent_x, parent_w = self:get(track_info.parent, isbeat, original, parent_tab)
+            local parent_x, parent_w = self:get(parent_track, isbeat, original, parent_tab)
 
-            if track_info.scale_with_parent == 1 then
+            if scale_with_parent == 1 then
+                -- 跟随父轨道缩放
                 local parent_l = parent_x - parent_w / 2
-                local parent_r = parent_x + parent_w / 2
-                return_w = return_w / chart.preference.event_scale * parent_w
-                return_x = parent_l + (return_x + chart.preference.x_offset) / chart.preference.event_scale * parent_w
+                local event_scale = ChartService:getPreferenceField('event_scale')
+                local x_offset = ChartService:getPreferenceField('x_offset')
+                return_w = return_w / event_scale * parent_w
+                return_x = parent_l + (return_x + x_offset) / event_scale * parent_w
             else
+                -- 仅偏移，不缩放
                 return_x = return_x + parent_x
             end
         end
     end
-    
+
     return return_x, return_w
 end
 
--- event函数
-function event:click(type, pos) --被点击
-    sidebar:to("nil")           --界面清除
-    --检测区间
-    local pos_interval = 20 * math.min(denom.scale, 1)
-    --根据距离反推出beat
-    local event_beat_up = beat:yToBeat(pos - pos_interval)
-    local event_beat_down = beat:yToBeat(pos + pos_interval)
-    for i = 1, #chart.event do
-        local isevent = chart.event[i]
-        local beat1 = beat:get(isevent.beat)
-        local beat2 = beat:get(isevent.beat2) or beat1
-        if isevent.type == type and isevent.track == track.track and
-            (math.intersect(beat1, beat2, event_beat_down, event_beat_up)) then
-            sidebar.displayed_content = "event" .. i
-            sidebar:to("event", i)
-            event:cleanUp()
-            return i
-        end
+--- 点击选择事件，打开侧边栏编辑界面
+-- @tparam string eventType 事件类型
+-- @tparam number pos 屏幕 Y 坐标
+-- @treturn number|nil 事件索引
+function event:click(eventType, pos)
+    sidebar:to("nil")
+    local idx, foundEvent = findEventInRange(eventType, pos)
+    if idx then
+        sidebar.displayed_content = "event" .. idx
+        sidebar:to("event", idx)
+        event:cleanUp()
+        return idx
     end
 end
 
-function event:delete(istype, pos)
-    sidebar:to("nil") --界面清除
-    --删除检测区间
-    local pos_interval = 20 * math.min(denom.scale, 1)
-    --根据距离反推出beat
-    local event_beat_up = beat:yToBeat(pos - pos_interval)
-    local event_beat_down = beat:yToBeat(pos + pos_interval)
-    for i = 1, #chart.event do
-        local isevent = chart.event[i]
-        local beat1 = beat:get(isevent.beat)
-        local beat2 = beat:get(isevent.beat2) or beat1
-        if isevent.track == track.track and isevent.type == istype and
-            (math.intersect(beat1, beat2, event_beat_down, event_beat_up)) then
-            chart:delete(isevent)
-            return
-        end
+--- 删除指定位置的事件
+-- @tparam string eventType 事件类型
+-- @tparam number pos 屏幕 Y 坐标
+function event:delete(eventType, pos)
+    sidebar:to("nil")
+    local _, foundEvent = findEventInRange(eventType, pos)
+    if foundEvent then
+        ChartService:delete(foundEvent)
     end
 end
 
-function event:place(istype, pos)
-    if (not table.find(trackSequence,istype)) or istype == 'note' then log('event type is note') return end
-    --根据距离反推出beat
-    local event_beat = beat:toNearby(beat:yToBeat(pos))
+--- 放置事件（支持长按放置头/尾）
+-- @tparam string eventType 事件类型 ("x", "w", "lpos", "rpos")
+-- @tparam number pos 屏幕 Y 坐标
+-- @treturn boolean|nil 是否放置成功
+function event:place(eventType, pos)
+    if not table.find(trackSequence, eventType) or eventType == 'note' then
+        log('event type is note')
+        return
+    end
 
-    if event.hold_type == 0 then --放置头
-        event.local_event = table.copy(meta_event.__index)
-        event.local_event.type = istype
-        event.local_event.track = track.track
-        event.local_event.beat = { event_beat[1], event_beat[2], event_beat[3] }
-        event.local_event.trans.easings = transIndex.easings
-        event.local_event.trans.trans = table.copy(event.bezier[transIndex.bezier]) or { 0, 0, 1, 1 }
+    local event_beat = beat:toNearby(CoordinateService:yToBeat(pos))
+
+    if event.hold_type == 0 then
+        -- 放置事件头
+        event.local_event = Event.new()
+        event.local_event:setType(eventType)
+        event.local_event:setTrack(track.track)
+        event.local_event:setBeat({ event_beat[1], event_beat[2], event_beat[3] })
+        event.local_event:setEasings(transIndex.easings)
+        event.local_event:setTransData(table.copy(event.bezier[transIndex.bezier]) or { 0, 0, 1, 1 })
+
         if settings.default_trans_type == 'easings' then
-            event.local_event.trans.type = 'easings'
+            event.local_event:setTransType('easings')
         else
-            event.local_event.trans.type = 'bezier'
+            event.local_event:setTransType('bezier')
         end
+
         event.hold_type = 1
-        local x, w = event:get(event.local_event.track, beat:get(event.local_event.beat), true) --把数值设定为上次event结尾的数值
-        if istype == "x" then
-            event.local_event.from, event.local_event.to = x, x
-        elseif istype == "w" then
-            event.local_event.from, event.local_event.to = w, w
-        elseif istype == "lpos" then
-            event.local_event.from, event.local_event.to = x - w / 2, x - w / 2
-        elseif istype == "rpos" then
-            event.local_event.from, event.local_event.to = x + w / 2, x + w / 2
+
+        -- 将初始值设为当前位置的事件值
+        local x, w = event:get(event.local_event:getTrack(), event.local_event:getBeatValue(), true)
+        if eventType == "x" then
+            event.local_event:setFrom(x)
+            event.local_event:setTo(x)
+        elseif eventType == "w" then
+            event.local_event:setFrom(w)
+            event.local_event:setTo(w)
+        elseif eventType == "lpos" then
+            event.local_event:setFrom(x - w / 2)
+            event.local_event:setTo(x - w / 2)
+        elseif eventType == "rpos" then
+            event.local_event:setFrom(x + w / 2)
+            event.local_event:setTo(x + w / 2)
         end
+
     elseif event.hold_type == 1 then
-        event.local_event.beat2 = { event_beat[1], event_beat[2], event_beat[3] }
-        if beat:get(event.local_event.beat2) <= beat:get(event.local_event.beat) then --尾巴比头早或重叠
+        -- 放置事件尾
+        event.local_event:setBeat2({ event_beat[1], event_beat[2], event_beat[3] })
+        if event.local_event:getBeat2Value() <= event.local_event:getBeatValue() then
+            -- 尾巴比头早或重叠，非法操作
             messageBox:add("illegal operation")
             event:cleanUp()
             return false
-        else -- 合法操作
-            chart:add(event.local_event)
+        else
+            -- 合法操作，添加到谱面
+            ChartService:add(event.local_event)
             event.hold_type = 2
         end
     end
-    if event.hold_type == 2 then --长条尾放置完成
-        --对event进行排序
-        local thetable = {}      --临时event表
-        local theevent = false   --得到event编辑的长条索引
-        local int_theevent = 1
-        local min = #chart.event --设1 event大小最小
+
+    if event.hold_type == 2 then
+        -- 长条放置完成，排序并打开编辑界面
         event:sort()
-        for i = 1, #chart.event do
-            if table.eq(chart.event[i], event.local_event) then --表相同
-                theevent = true
+        local int_theevent = 1
+        for i = 1, ChartService:getEventCount() do
+            if ChartService:getEvent(i) == event.local_event then
                 int_theevent = i
                 break
             end
@@ -241,18 +362,14 @@ function event:place(istype, pos)
     end
 end
 
+--- 对事件列表排序（按 beat 升序）
+-- 同时对 extra_chart 中的事件列表排序
 function event:sort()
-    --对event进行排序
-    table.sort(chart.event, function(a, b) return beat:get(a.beat) < beat:get(b.beat) end)
-    for i, v in pairs(extra_chart.track) do
-        for _,event_type in ipairs(trackSequence) do
-            if v[event_type] then
-                table.sort(v[event_type], function(a, b) return beat:get(a.beat) < beat:get(b.beat) end)
-            end
-        end
-    end
+    ChartService:sortEvents()
 end
 
+--- 获取当前正在放置的长按事件数据
+-- @treturn table 长按事件数据表
 function event:getHoldTable()
     return event.local_event
 end

@@ -1,5 +1,6 @@
 
 local buttonSave = object:new('save')
+local ChartService = require("src.services.chartService")
 buttonSave.sound = love.audio.newSource('assets/sound/save.ogg', "stream")
 buttonSave.time = 0 --保存时间
 buttonSave.type = 'button'
@@ -9,10 +10,10 @@ buttonSave.img = isImage.save
 function buttonSave:click(isAutoSave)
     if isAutoSave then
         messageBox:add("auto save")
-        save(chart,"chart.json.auto")
+        ChartService:save("chart.json.auto")
 
     else
-        save(chart,"chart.json")
+        ChartService:save("chart.json")
         messageBox:add("save")
     end
     self.sound:seek(0)

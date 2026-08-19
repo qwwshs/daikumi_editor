@@ -1,4 +1,5 @@
 --编辑track属性
+local ChartService = require("src.services.chartService")
 local GtrackEdit = group:new('track edit')
 GtrackEdit.breakroom = 'track'
 GtrackEdit.type = "track edit"
@@ -10,20 +11,17 @@ GtrackEdit.parentTrack = {value = 0} --为0时无父轨道
 GtrackEdit.scale_with_parent = {value = false}
 function GtrackEdit:to(istrack)
     self.track = istrack
-    if not chart.track[tostring(istrack)] then
-        chart.track[tostring(istrack)] = table.copy(meta_track.__index)
-    end
-    local track_obj = chart.track[tostring(istrack)]
-    self.trackName.value = track_obj.name
-    self.parentTrack.value = track_obj.parent
+    ChartService:ensureTrack(istrack)
+    self.trackName.value = ChartService:getTrackField(istrack, 'name')
+    self.parentTrack.value = ChartService:getTrackField(istrack, 'parent')
 
-    if track_obj.w0thenShow == 0 then
+    if ChartService:getTrackField(istrack, 'w0thenShow') == 0 then
         self.w0thenShow.value = false
     else
         self.w0thenShow.value = true
     end
 
-    if track_obj.scale_with_parent == 0 then
+    if ChartService:getTrackField(istrack, 'scale_with_parent') == 0 then
         self.scale_with_parent.value = false
     else
         self.scale_with_parent.value = true
@@ -51,21 +49,21 @@ function GtrackEdit:Nui()
 end
 function GtrackEdit:NuiNext()
     local istrack = self.track
-    chart.track[tostring(istrack)].name = self.trackName.value
+    ChartService:setTrackField(istrack, 'name', self.trackName.value)
     
     if self.w0thenShow.value then
-        chart.track[tostring(istrack)].w0thenShow = 1
+        ChartService:setTrackField(istrack, 'w0thenShow', 1)
     else
-        chart.track[tostring(istrack)].w0thenShow = 0
+        ChartService:setTrackField(istrack, 'w0thenShow', 0)
     end
 
     if self.scale_with_parent.value then
-        chart.track[tostring(istrack)].scale_with_parent = 1
+        ChartService:setTrackField(istrack, 'scale_with_parent', 1)
     else
-        chart.track[tostring(istrack)].scale_with_parent = 0
+        ChartService:setTrackField(istrack, 'scale_with_parent', 0)
     end
 
-    chart.track[tostring(istrack)].parent = tonumber(self.parentTrack.value) or 0
+    ChartService:setTrackField(istrack, 'parent', tonumber(self.parentTrack.value) or 0)
 end
 
 return GtrackEdit

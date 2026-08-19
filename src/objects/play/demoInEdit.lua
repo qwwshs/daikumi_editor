@@ -1,4 +1,6 @@
 --edit区域渲染
+local ChartService = require("src.services.chartService")
+local CoordinateService = require("src.services.coordinateService")
 local demoInEdit = object:new('demoInEdit')
 
 local trackleft = {} --每个轨道的左边距
@@ -32,8 +34,8 @@ function demoInEdit:drawSample(pos, istrack)
     local sound_data_count = music_data:getSampleCount()
     local channel_count = music_data:getChannelCount()
     local sampleRate = music_data:getSampleRate()
-    local time_end = math.ceil(beat:toTime(chart.bpm_list, math.min(beat:yToBeat(0), beat.allbeat)) - chart.offset / 1000)
-    local time_now = math.floor(math.max(time.nowtime, 0) - chart.offset / 1000)
+    local time_end = math.ceil(ChartService:toTime(math.min(CoordinateService:yToBeat(0), beat.allbeat)) - ChartService:getOffset() / 1000)
+    local time_now = math.floor(math.max(time.nowtime, 0) - ChartService:getOffset() / 1000)
     love.graphics.setColor(1, 1, 1, 0.3)
     local time_step = 0.005
 
@@ -42,12 +44,12 @@ function demoInEdit:drawSample(pos, istrack)
             local sample = math.max(math.min(sampleRate * istime, sound_data_count - 1), 0)
             local w = music_data:getSample(sample, i) / 2 * interval * 3
             local x = pos + interval * 1.5
-            local y = beat:toY(beat:toBeat(chart.bpm_list, istime + chart.offset / 1000))
+            local y = CoordinateService:toY(ChartService:toBeat(istime + ChartService:getOffset() / 1000))
 
             local sample_next = math.max(math.min(sampleRate * (istime + time_step), sound_data_count - 1), 0)
             local w_next = music_data:getSample(sample_next, i) / 2 * interval * 3
             local x_next = pos + interval * 1.5
-            local y_next = beat:toY(beat:toBeat(chart.bpm_list, istime + time_step + chart.offset / 1000))
+            local y_next = CoordinateService:toY(ChartService:toBeat(istime + time_step + ChartService:getOffset() / 1000))
 
             love.graphics.polygon('fill',
                 x, y,
@@ -109,18 +111,19 @@ function demoInEdit:draw(pos, istrack)
     local _scale_h2 = 0
     local y = 0
     local y2 = 0
-    for i = index_start, #chart.note do
-        if chart.note[i].track == istrack then
-            local y = beat:toY(chart.note[i].beat)
+    for i = index_start, ChartService:getNoteCount() do
+        local n = ChartService:getNote(i)
+        if n:getTrack() == istrack then
+            local y = CoordinateService:toY(n:getBeat())
             local y2 = y
-            if chart.note[i].type == "hold" then
-                y2 = beat:toY(chart.note[i].beat2)
+            if n:isHold() then
+                y2 = CoordinateService:toY(n:getBeat2())
             end
             if math.intersect(y, y2, WINDOW.h + note_h, -note_h) then
                 if previous_frame_starting_point == 0 then previous_frame_starting_point = i end
-                if chart.note[i].type == "note" then
+                if n:isNote() then
                     love.graphics.draw(self.ui_note, trackleft.note, y - note_h, 0, self._scale_w, _scale_h)
-                elseif chart.note[i].type == "wipe" then
+                elseif n:isWipe() then
                     love.graphics.draw(self.ui_wipe, trackleft.note, y - note_h, 0, self._scale_w, _scale_h)
                 else --hold
                     note_h2 = y - y2 - note_h * 2
@@ -128,16 +131,16 @@ function demoInEdit:draw(pos, istrack)
                     love.graphics.draw(self.ui_hold, trackleft.note, y - note_h, 0, self._scale_w, _scale_h)        -- 头
                     love.graphics.draw(self.ui_hold_tail, trackleft.note, y2, 0, self._scale_w, _scale_h)           -- 尾
                     love.graphics.draw(self.ui_hold_body, trackleft.note, y2 + note_h, 0, self._scale_w, _scale_h2) --身
-                    if chart.note[i].note_head == 1 then
+                    if n:getNoteHead() == 1 then
                         love.graphics.draw(self.ui_note, trackleft.note, y - note_h, 0, self._scale_w / 2, _scale_h)
                     end
-                    if chart.note[i].wipe_head == 1 then
+                    if n:getWipeHead() == 1 then
                         love.graphics.draw(self.ui_wipe, trackleft.note + self.note_w / 2, y - note_h, 0, self._scale_w / 2,
                             _scale_h)
                     end
                 end
-                if chart.note[i].fake and chart.note[i].fake == 1 then --假note
-                    love.graphics.setColor(play.colors.isFakeNote)
+                if n:isFakeNote() then --假note
+                    love.graphics.setColor(play.colors.red)
                     love.graphics.rectangle('line', trackleft.note, y - note_h, self.note_w, note_h)
                     love.graphics.printf('false', trackleft.note, y - note_h, interval, 'center')
                     love.graphics.setColor(1, 1, 1)
@@ -149,10 +152,10 @@ function demoInEdit:draw(pos, istrack)
     end
     --放置一半的长条渲染
     local thelocal_hold = fNote:getHoldTable()
-    if thelocal_hold.beat and thelocal_hold.track == istrack then -- 存在
+    if thelocal_hold._data and thelocal_hold:getTrack() == istrack then -- 存在
         love.graphics.setColor(1, 1, 1)
-        local y = beat:toY(thelocal_hold.beat)
-        local y2 = beat:toY(beat:toNearby(beat:yToBeat(mouse.y)))
+        local y = CoordinateService:toY(thelocal_hold:getBeat())
+        local y2 = CoordinateService:toY(beat:toNearby(CoordinateService:yToBeat(mouse.y)))
         local note_h2 = y - y2 - note_h * 2
         local _scale_h2 = 1 / self._height * note_h2
         if math.intersect(y, y2, track_y + track_h + note_h, -note_h) then
@@ -164,43 +167,47 @@ function demoInEdit:draw(pos, istrack)
 
     local note_index = sidebar.incoming[1]               --选中的note
     if sidebar.displayed_content == "note" and           --选中note框绘制
-        chart.note[note_index] and
-        chart.note[note_index].track == track.track then --框出现在编辑的note
-        local y = beat:toY(chart.note[note_index].beat)
+        ChartService:getNote(note_index) and
+        ChartService:getNote(note_index):getTrack() == track.track then --框出现在编辑的note
+        local sn = ChartService:getNote(note_index)
+        local y = CoordinateService:toY(sn:getBeat())
         local y2 = y - note_h
-        if chart.note[note_index].type == 'hold' then
-            y2 = beat:toY(chart.note[note_index].beat2)
+        if sn:isHold() then
+            y2 = CoordinateService:toY(sn:getBeat2())
         end
-        love.graphics.setColor(play.colors.selectingNote)
+        love.graphics.setColor(play.colors.white_half)
         love.graphics.rectangle("fill", trackleft.note, y2, interval, y - y2)
     end
 
     --event渲染
     local event_h = settings.note_height
     local event_w = play.layout.edit.oneTrackW
+    local x_offset = ChartService:getPreferenceField('x_offset')
+    local event_scale = ChartService:getPreferenceField('event_scale')
 
-    for i = index_start_event, #chart.event do
-        if chart.event[i].track == istrack then
+    for i = index_start_event, ChartService:getEventCount() do
+        local e = ChartService:getEvent(i)
+        if e:getTrack() == istrack then
             love.graphics.setColor(1, 1, 1)
-            local y = beat:toY(chart.event[i].beat)
-            local y2 = beat:toY(chart.event[i].beat2)
+            local y = CoordinateService:toY(e:getBeat())
+            local y2 = CoordinateService:toY(e:getBeat2())
             local event_h2 = y - y2 - event_h * 2
             local _scale_h2 = 1 / self._height * event_h2
-            local x_pos = trackleft[chart.event[i].type]
+            local x_pos = trackleft[e:getType()]
             if math.intersect(y, y2, WINDOW.h + note_h, -note_h) then
                 if previous_frame_starting_point_event == 0 then previous_frame_starting_point_event = i end
                 love.graphics.draw(self.ui_hold, x_pos, y - event_h, 0, self._scale_w, _scale_h)        -- 头
-                love.graphics.printf(chart.event[i].from, x_pos, y - event_h, interval, 'center')
+                love.graphics.printf(e:getFrom(), x_pos, y - event_h, interval, 'center')
                 love.graphics.draw(self.ui_hold_body, x_pos, y2 + event_h, 0, self._scale_w, _scale_h2) --身
 
                 love.graphics.draw(self.ui_hold_tail, x_pos, y2, 0, self._scale_w, _scale_h)            --尾
-                love.graphics.printf(chart.event[i].to, x_pos, y2, interval, 'center')
+                love.graphics.printf(e:getTo(), x_pos, y2, interval, 'center')
                 -- beizer曲线
                 for k = 1, 10 do
-                    local nowx = (chart.event[i].from - chart.preference.x_offset) / chart.preference.event_scale *
+                    local nowx = (e:getFrom() - x_offset) / event_scale *
                         interval + x_pos +
-                        fEvent:getTrans(chart.event[i], k / 10) *
-                        ((chart.event[i].to - chart.event[i].from) / chart.preference.event_scale * interval)
+                        fEvent:getTrans(e, k / 10) *
+                        ((e:getTo() - e:getFrom()) / event_scale * interval)
                     local nowy = y + (y2 - y) * k / 10
                     love.graphics.rectangle("fill", nowx, nowy - (y2 - y) / 10, 5, (y2 - y) / 10)                --减去一个 (y2 - y)/10是为了与头对齐
                 end
@@ -211,13 +218,13 @@ function demoInEdit:draw(pos, istrack)
     end
     --放置一半的event渲染
     local thelocal_event = fEvent:getHoldTable()
-    if thelocal_event.beat and thelocal_event.track == istrack then -- 存在
+    if thelocal_event._data and thelocal_event:getTrack() == istrack then -- 存在
         love.graphics.setColor(1, 1, 1)
-        local y = beat:toY(thelocal_event.beat)
-        local y2 = beat:toY(beat:toNearby(beat:yToBeat(mouse.y)))
+        local y = CoordinateService:toY(thelocal_event:getBeat())
+        local y2 = CoordinateService:toY(beat:toNearby(CoordinateService:yToBeat(mouse.y)))
         local event_h2 = y - y2 - event_h * 2
         local _scale_h2 = 1 / self._height * event_h2
-        local x_pos = trackleft[thelocal_event.type]
+        local x_pos = trackleft[thelocal_event:getType()]
 
         if math.intersect(y, y2, WINDOW.h + note_h, -note_h) then
             love.graphics.draw(self.ui_hold, x_pos, y - note_h, 0, self._scale_w, _scale_h)         --头
@@ -227,15 +234,16 @@ function demoInEdit:draw(pos, istrack)
     end
 
     local event_index = sidebar.incoming[1]                                  --选中的event
-    if sidebar.displayed_content == "event" and chart.event[event_index] and --选中event框绘制
-        chart.event[event_index].track == track.track then                   --框出现在编辑的event
-        local y = beat:toY(chart.event[event_index].beat)
-        local y2 = beat:toY(chart.event[event_index].beat2)
-        love.graphics.setColor(play.colors.selectingEvent)
-        love.graphics.rectangle("fill", trackleft[chart.event[event_index].type], y2, interval, y - y2)
+    if sidebar.displayed_content == "event" and ChartService:getEvent(event_index) and --选中event框绘制
+        ChartService:getEvent(event_index):getTrack() == track.track then             --框出现在编辑的event
+        local se = ChartService:getEvent(event_index)
+        local y = CoordinateService:toY(se:getBeat())
+        local y2 = CoordinateService:toY(se:getBeat2())
+        love.graphics.setColor(play.colors.white_half)
+        love.graphics.rectangle("fill", trackleft[se:getType()], y2, interval, y - y2)
     end
 
-    love.graphics.setColor(play.colors.editInJudgheLineDownBg)
+    love.graphics.setColor(play.colors.black_half)
     love.graphics.rectangle("fill", pos, settings.judge_line_y + 10, track_w + 3, WINDOW.h - settings.judge_line_y) --遮罩
     love.graphics.setColor(1, 1, 1)                                                                                 --现在节拍
     love.graphics.print(i18n:get('beat') .. ":" .. math.roundToPrecision(beat.nowbeat, 100), pos,
@@ -243,18 +251,19 @@ function demoInEdit:draw(pos, istrack)
     love.graphics.print(i18n:get('time') .. ":" .. math.roundToPrecision(time.nowtime, 100), pos,
         settings.judge_line_y + 40)
     local now_x, now_w = fEvent:get(istrack, beat.nowbeat, true)
-    local track_info = fTrack:get_track_info(istrack)
+    local track_w0thenShow = ChartService:getTrackField(istrack, 'w0thenShow')
+    local track_name = ChartService:getTrackField(istrack, 'name')
     love.graphics.print(i18n:get('x') .. ":" .. math.roundToPrecision(now_x, 100), pos + 100,
             settings.judge_line_y + 20)
     love.graphics.print(i18n:get('w') .. ":" .. math.roundToPrecision(now_w, 100), pos + 200,
             settings.judge_line_y + 20)
-    if track_info.w0thenShow == 0 then
+    if track_w0thenShow == 0 then
         love.graphics.print(i18n:get('hide'), pos + 200, settings.judge_line_y + 40)
     else
         love.graphics.print(i18n:get('do_not_hide'), pos + 200, settings.judge_line_y + 40)
     end
     love.graphics.print(i18n:get('track') .. ":" .. istrack, pos, settings.judge_line_y + 60)
-    love.graphics.print(i18n:get('track_name') .. ":" .. track_info.name, pos, settings.judge_line_y + 80)
+    love.graphics.print(i18n:get('track_name') .. ":" .. track_name, pos, settings.judge_line_y + 80)
 end
 
 return demoInEdit

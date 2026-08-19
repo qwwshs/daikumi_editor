@@ -1,56 +1,103 @@
--- Copyright (C) 2010-2024 qwwshs
+--[[
+    模块名: main
+    描述: dakumi editor 主入口文件，定义全局变量、UI 初始化、事件循环、错误处理
+    作者: qwwshs
+    版本: 0.5.0c
+    框架: LOVE2D 11.4
 
-DAKUMI           = { _VERSION = "0.5.0c" }
-beat             = beat
-time             = { nowtime = 0, alltime = 1 }
-chart            = {}
-extra_chart      = {} --解决chart遍历慢的问题
-bg               = nil
-music            = nil
-music_data       = nil
-music_play       = false
-mouse            = { x = 0, y = 0, down = false ,cursor = ''} --鼠标按下状态
-elapsed_time     = 0                              -- 已运行时间
+    全局变量说明:
+    - DAKUMI: 版本信息
+    - time/beat: 时间和节拍状态
+    - music/music_data/music_play: 音频状态
+    - mouse/iskeyboard: 输入状态
+    - WINDOW: 窗口尺寸和缩放信息
+    - PATH: 资源和用户数据路径配置
+    - FONT: 字体资源
+    - bg: 当前背景图片
+    - Nui: Nuklear UI 实例
+]]
+
+DAKUMI           = { _VERSION = "0.5.0c" }         -- 版本信息
+beat             = beat                             -- 节拍计算模块（在 isRequire.lua 中初始化）
+time             = { nowtime = 0, alltime = 1 }    -- 时间状态：当前时间、总时长
+-- chart/extra_chart 已由 ChartService 私有持有，不再定义全局变量
+bg               = nil                              -- 当前背景图片
+music            = nil                              -- 当前音频源
+music_data       = nil                              -- 音频波形数据
+music_play       = false                            -- 音乐是否正在播放
+
+--- 鼠标状态
+mouse            = { x = 0, y = 0, down = false, cursor = '' }
+elapsed_time     = 0                               -- 应用已运行时间（秒）
+
+--- 字体资源
 FONT             = {
-    normal = love.graphics.newFont("assets/fonts/LXGWNeoXiHei.ttf", 13),
-    plus = love.graphics.newFont(
-        "assets/fonts/LXGWNeoXiHei.ttf", 26)
+    normal = love.graphics.newFont("assets/fonts/LXGWNeoXiHei.ttf", 13),  -- 普通字体
+    plus = love.graphics.newFont("assets/fonts/LXGWNeoXiHei.ttf", 26),    -- 大号字体
 }
 
-iskeyboard       = {}                                                                            --key的按下状态
-iskeyboard.alt   = false                                                                         --alt按下状态
-iskeyboard.ctrl  = false                                                                         --ctrl按下状态
-iskeyboard.shift = false                                                                         --shift按下状态
+--- 键盘按下状态
+iskeyboard       = {}
+iskeyboard.alt   = false                           -- Alt 键是否按下
+iskeyboard.ctrl  = false                           -- Ctrl 键是否按下
+iskeyboard.shift = false                           -- Shift 键是否按下
 
-WINDOW           = { w = 1600, h = 900, scale = 1, nowW = 1600, nowH = 900, fullscreen = false } --窗口信息
+--- 窗口信息
+-- w/h: 设计分辨率, scale: 缩放比例, nowW/nowH: 实际窗口尺寸, fullscreen: 是否全屏
+WINDOW           = { w = 1600, h = 900, scale = 1, nowW = 1600, nowH = 900, fullscreen = false }
+
+--- 路径配置
 PATH             = {
-    i18n = 'i18n/',
-    users = 'users/',
+    i18n = 'i18n/',                                 -- 国际化文件目录
+    users = 'users/',                               -- 用户数据根目录
     usersPath = {
-        settings = 'users/',
-        hit = 'users/',
-        chart = 'users/chart/',
-        log = 'users/log/',
-        export = 'users/export/',
-        auto_save = 'users/auto_save/',
-        ui = 'users/ui/',
-        key = 'users/',
+        settings = 'users/',                        -- 设置文件
+        hit = 'users/',                             -- 打击音效
+        chart = 'users/chart/',                     -- 谱面文件
+        log = 'users/log/',                         -- 日志文件
+        export = 'users/export/',                   -- 导出文件
+        auto_save = 'users/auto_save/',             -- 自动保存
+        ui = 'users/ui/',                           -- UI 配置
+        key = 'users/',                             -- 快捷键配置
     },
-    editToolData = '',
-    defaultBezier = '',
-    base = love.filesystem.getSourceBaseDirectory(), --保存路径
+    plugins = 'plugins/',                           -- 插件目录（外部可访问）
+    editToolData = '',                              -- 编辑工具数据文件路径（运行时设置）
+    defaultBezier = '',                             -- 默认贝塞尔曲线文件路径（运行时设置）
+    base = love.filesystem.getSourceBaseDirectory(), -- 应用基础目录
     web = {
-        github = "https://github.com/qwwshs/daikumi/",
-        dakumi = "https://dakumi.qwwshs.top"
+        github = "https://github.com/qwwshs/daikumi/",  -- GitHub 仓库
+        dakumi = "https://dakumi.qwwshs.top"             -- 官方网站
     }
 }
 
+-- 将插件目录添加到 Lua 搜索路径
+package.path = PATH.plugins .. "?.lua;" .. PATH.plugins .. "?/init.lua;" .. package.path
 
-love.keyboard.setKeyRepeat(true) --键重复
+love.keyboard.setKeyRepeat(true)    -- 启用键重复（长按时连续触发）
 love.graphics.setFont(FONT.normal)
 FONT.normal:setFilter("linear", "nearest")
 FONT.plus:setFilter("linear", "nearest")
+
+-- 加载所有模块和依赖
 require 'isRequire'
+
+-- 初始化插件管理器和服务层
+PluginManager = require("src.utils.plugin")
+local ChartService = require("src.services.chartService")
+local CoordinateService = require("src.services.coordinateService")
+local AudioService = require("src.services.audioService")
+
+--- 插件上下文：提供给插件的服务访问接口
+PluginManager:init({
+    chart = ChartService,       -- 谱面数据服务
+    coord = CoordinateService,  -- 坐标转换服务
+    audio = AudioService,       -- 音频服务
+    beat = beat,                -- 节拍计算模块
+    settings = nil,             -- 设置（运行时由 settings.lua 加载后赋值）
+    i18n = nil,                 -- 国际化（运行时由 i18n.lua 加载后赋值）
+    WINDOW = WINDOW,            -- 窗口信息
+    PATH = PATH,                -- 路径配置
+})
 
 Nui = nuklear.newUI()
 Nui:styleLoadColors({
@@ -203,10 +250,9 @@ function love.draw()
 end
 
 function love.keypressed(key, scancode, isrepeat)
-    local t, r = pcall(function() Nui:keypressed(key, scancode, isrepeat) end)
-    if r then
-        return
-    end
+    -- 将键盘事件传递给 Nuklear UI，如果 UI 消费了事件则跳过游戏逻辑
+    local success = pcall(function() Nui:keypressed(key, scancode, isrepeat) end)
+    if not success then return end
 
     if key == "lctrl" or key == "rctrl" then
         iskeyboard.ctrl = true
@@ -226,10 +272,8 @@ function love.keypressed(key, scancode, isrepeat)
 end
 
 function love.keyreleased(key, scancode)
-    local t, r = pcall(function() Nui:keyreleased(key, scancode) end)
-    if r then
-        return
-    end
+    local success = pcall(function() Nui:keyreleased(key, scancode) end)
+    if not success then return end
 
     if key == "lctrl" or key == "rctrl" then
         iskeyboard.ctrl = false
@@ -246,19 +290,15 @@ function love.keyreleased(key, scancode)
 end
 
 function love.wheelmoved(x, y)
-    local t, r = pcall(function() Nui:wheelmoved(x, y) end)
-    if r then
-        return
-    end
+    local success = pcall(function() Nui:wheelmoved(x, y) end)
+    if not success then return end
 
     room("wheelmoved", x, y)
 end
 
 function love.mousepressed(x, y, button, istouch, presses)
-    local t, r = pcall(function() Nui:mousepressed(x, y, button, istouch, presses) end)
-    if r then
-        return
-    end
+    local success = pcall(function() Nui:mousepressed(x, y, button, istouch, presses) end)
+    if not success then return end
 
     x = mouse.x --对缩放进行处理
     y = mouse.y
@@ -267,10 +307,8 @@ function love.mousepressed(x, y, button, istouch, presses)
 end
 
 function love.mousereleased(x, y, button, istouch, presses)
-    local t, r = pcall(function() Nui:mousereleased(x, y, button, istouch, presses) end)
-    if r then
-        return
-    end
+    local success = pcall(function() Nui:mousereleased(x, y, button, istouch, presses) end)
+    if not success then return end
 
     x = mouse.x --对缩放进行处理
     y = mouse.y
@@ -280,10 +318,8 @@ function love.mousereleased(x, y, button, istouch, presses)
 end
 
 function love.mousemoved(x, y, dx, dy, istouch)
-    local t, r = pcall(function() Nui:mousemoved(x, y, dx, dy, istouch) end)
-    if r then
-        return
-    end
+    local success = pcall(function() Nui:mousemoved(x, y, dx, dy, istouch) end)
+    if not success then return end
 
     x = mouse.x --对缩放进行处理
     y = mouse.y
@@ -292,10 +328,8 @@ function love.mousemoved(x, y, dx, dy, istouch)
 end
 
 function love.textinput(input)
-    local t, r = pcall(function() Nui:textinput(input) end)
-    if r then
-        return
-    end
+    local success = pcall(function() Nui:textinput(input) end)
+    if not success then return end
 
     room("textinput", input)
 end
@@ -378,7 +412,7 @@ local function error_printer(msg, layer)
 end
 
 function love.errorhandler(msg)
-    if type(save) == 'function' then pcall(function() save(chart, "chart.json") end) end
+    if type(ChartService) == 'table' then pcall(function() ChartService:save("chart.json") end) end
     love.system.openURL(love.filesystem.getRealDirectory("chart"))
     msg = tostring(msg)
     if type(log) == 'function' then log("error:" .. msg) end

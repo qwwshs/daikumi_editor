@@ -7,34 +7,34 @@ function select_music:draw()
     --歌曲信息
 
     --背景板
-    love.graphics.setColor(colors.bg)
+    love.graphics.setColor(colors.dgray)
     love.graphics.rectangle("fill", layout.musicSelect.x, layout.musicSelect.y, layout.musicSelect.w,
         layout.musicSelect.h)
 
     --装饰线
-    love.graphics.setColor(colors.line2)
+    love.graphics.setColor(colors.white_half)
     love.graphics.rectangle("fill", layout.musicSelect.x, layout.musicSelect.y, 1, layout.musicSelect.h)
-    love.graphics.setColor(colors.line3)
+    love.graphics.setColor(colors.white)
     love.graphics.rectangle("fill", layout.musicSelect.x - 5, layout.musicSelect.y, 3, layout.musicSelect.h)
 
 
     local middle = WINDOW.h/2
     local fontHeight = love.graphics.getFont():getHeight()
 
-    love.graphics.setColor(colors.selectThisMusicTextBg)
+    love.graphics.setColor(colors.white_fade)
     love.graphics.rectangle("fill", layout.musicSelect.x, middle - layout.musicSelect.musicH / 2, layout.musicSelect.w,
         layout.musicSelect.musicH)
 
 
     for i, v in ipairs(menu.chartTab) do
         --分割线
-        love.graphics.setColor(colors.line4)
+        love.graphics.setColor(colors.white_dim)
         love.graphics.rectangle("line", layout.musicSelect.x, (i - menu.selectMusicPos) * layout.musicSelect.musicH - layout.musicSelect.musicH / 2 + middle, layout.musicSelect.w,
         layout.musicSelect.musicH)
         if i == menu.selectMusicPos then
-            love.graphics.setColor(colors.selectThisMusicText)
+            love.graphics.setColor(colors.white)
         else
-            love.graphics.setColor(colors.unSelectThisMusicText)
+            love.graphics.setColor(colors.white_half)
         end
 
 
