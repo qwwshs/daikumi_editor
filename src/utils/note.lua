@@ -22,8 +22,9 @@ function note:holdCleanUp()
 end
 --- 在指定位置查找 note（用于点击选中）
 -- @tparam number pos 屏幕 Y 坐标
+-- @tparam number|nil trackId 指定轨道（默认 track.track）
 -- @treturn number|nil 找到的 note 索引，未找到返回 nil
-function note:click(pos)
+function note:click(pos, trackId)
     --检测区间
     local pos_interval = 20 * denom.scale
     --根据距离反推出beat
@@ -33,7 +34,7 @@ function note:click(pos)
         local isnote = ChartService:getNote(i)
         local beatVal = isnote:getBeatValue()
         local beat2 = isnote:getBeat2()
-        if isnote:getTrack() == track.track and
+        if isnote:getTrack() == (trackId or track.track) and
         (math.intersect(beatVal, beatVal, note_beat_down, note_beat_up)
         or (beat2 and -- 长条
         math.intersect(beatVal, isnote:getBeat2Value(), note_beat_down, note_beat_up))) then
@@ -44,7 +45,8 @@ end
 
 --- 删除指定位置的 note
 -- @tparam number pos 屏幕 Y 坐标
-function note:delete(pos)
+-- @tparam number|nil trackId 指定轨道（默认 track.track）
+function note:delete(pos, trackId)
     --删除检测区间
     local pos_interval = 20 * denom.scale
     --根据距离反推出beat
@@ -54,7 +56,7 @@ function note:delete(pos)
         local isnote = ChartService:getNote(i)
         local beatVal = isnote:getBeatValue()
         local beat2 = isnote:getBeat2()
-        if isnote:getTrack() == track.track and
+        if isnote:getTrack() == (trackId or track.track) and
         ((beatVal >= note_beat_down and beatVal <= note_beat_up)
         or (beat2 and -- 长条
         math.intersect(beatVal, isnote:getBeat2Value(), note_beat_up, note_beat_down))) then
@@ -68,8 +70,10 @@ end
 --- 在指定位置放置 note
 -- @tparam string note_type note 类型: "note", "hold", "wipe"
 -- @tparam number pos 屏幕 Y 坐标
+-- @tparam number|nil trackId 指定轨道（默认 track.track）
 -- @treturn boolean|nil 放置成功返回 true，失败返回 false
-function note:place(note_type,pos)
+function note:place(note_type,pos,trackId)
+    local istrack = trackId or track.track
     --根据距离反推出beat
     local note_beat = beat:toNearby(CoordinateService:yToBeat(pos))
     if note_type ~= "hold" then --不是长条
@@ -77,28 +81,28 @@ function note:place(note_type,pos)
         local note_correct_beat = {note_beat[1],note_beat[2],note_beat[3]}
         for i = 1, ChartService:getNoteCount() do --重叠
             local isnote = ChartService:getNote(i)
-            if isnote:getTrack() == track.track and isnote:getBeatValue() == beat:get(note_correct_beat) then
+            if isnote:getTrack() == istrack and isnote:getBeatValue() == beat:get(note_correct_beat) then
                 messageBox:add("overlap")
                 return false
             end
         end
         local isnote = Note.new({
             type = note_type,
-            track = track.track,
+            track = istrack,
             beat = {note_beat[1],note_beat[2],note_beat[3]},
             fake = noteFake.v,
         })
         ChartService:add(isnote)
 
         note.local_tab = {type = note_type,
-        track = track.track,
+        track = istrack,
         beat = {note_beat[1],note_beat[2],note_beat[3]}
         ,fake = noteFake.v}
     else
         if note.hold_type == 0 then --放置头
             note.local_hold = Note.new({
                 type = note_type,
-                track = track.track,
+                track = istrack,
                 beat = {note_beat[1],note_beat[2],note_beat[3]},
                 fake = noteFake.v,
                 note_head = holdNoteHead.v,
@@ -109,7 +113,7 @@ function note:place(note_type,pos)
             note.local_tab = table.copy(note.local_tab)
             note.local_tab.type = note_type
             note.local_tab.beat = {note_beat[1],note_beat[2],note_beat[3]}
-            note.local_tab.track = track.track
+            note.local_tab.track = istrack
             note.local_tab.fake = noteFake.v
 
         elseif note.hold_type == 1 then

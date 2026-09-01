@@ -96,7 +96,7 @@ sidebar:addGroup(require 'src.objects.sidebar.chart_info')
 sidebar:addGroup(require 'src.objects.sidebar.event')
 sidebar:addGroup(require 'src.objects.sidebar.note')
 sidebar:addGroup(require 'src.objects.sidebar.events')
-sidebar:addGroup(require 'plugins.to_takana')    -- 插件化：Takana 转谱器
-sidebar:addGroup(require 'plugins.equalizer')    -- 插件化：均衡器
+sidebar:addGroup(require 'src.objects.sidebar.to_takana')    -- 插件化：Takana 转谱器
+sidebar:addGroup(require 'src.objects.sidebar.equalizer')
 
 return sidebar

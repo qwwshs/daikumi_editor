@@ -53,6 +53,7 @@ function play:mouseInDemo()
 end
 
 function play:update(dt)
+
     self('update', dt)
     effect_ed = {
         note_alpha = false,
@@ -171,6 +172,10 @@ function play:keypressed(key)
     if not math.intersect(mouse.x, mouse.x, self.layout.x, self.layout.x + self.layout.w) then --限制范围
         return
     end
+    if tabs and tabs:isRenaming() then --重命名时按键只交给标签页
+        tabs:keypressed(key)
+        return
+    end
     self('keypressed', key)
 end
 
@@ -182,13 +187,14 @@ function play:wheelmoved(x, y)
 end
 
 function play:mousepressed(x, y, button, istouch, presses)
-    if not self:mouseInPlay() then --限制范围
+    --限制范围（包含标签条与拖动条）
+    if not self:mouseInPlay() then
         return
     end
     self('mousepressed', x, y, button, istouch, presses)
 
     
-    if self:mouseInDemo() and love.mouse.isDown(1) and not directEventEditing.open then -- 选择轨道 在demo区域
+    if self:mouseInDemo() and love.mouse.isDown(1) and not directEventEditing.open and tabs:isSingle() then -- 选择轨道 在demo区域
         messageBox:add("track click")
         local local_track = {}
         for i = 1, ChartService:getEventCount() do                                   --点击轨道进入轨道的编辑事件

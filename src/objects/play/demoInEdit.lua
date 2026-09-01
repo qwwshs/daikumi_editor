@@ -3,8 +3,6 @@ local ChartService = require("src.services.chartService")
 local CoordinateService = require("src.services.coordinateService")
 local demoInEdit = object:new('demoInEdit')
 
-local trackleft = {} --每个轨道的左边距
-
 function demoInEdit:load()
     self.ui_note = isImage.note
     self.ui_wipe = isImage.wipe
@@ -16,13 +14,6 @@ function demoInEdit:load()
     self._width, self._height = self.ui_note:getDimensions() -- 得到宽高
     self._scale_w = 1 / self._width * self.note_w
     self.layout = play.layout.edit
-    trackleft  = {
-        note = trackSequence:getRange('note'),
-        x = trackSequence:getRange('x'),
-        w = trackSequence:getRange('w'),
-        lpos = trackSequence:getRange('lpos'),
-        rpos = trackSequence:getRange('rpos'),
-    }
 end
 
 function demoInEdit:drawSample(pos, istrack)
@@ -74,13 +65,25 @@ function demoInEdit:draw(pos, istrack)
     local all_track = fTrack:track_get_all_track()
     local note_h = settings.note_height --25 * denom.scale
     local _scale_h = 1 / self._height * note_h
+
+    --多标签页时由 tabs 负责每个窗口的渲染，自身只在单标签页时绘制
+    if pos == nil and tabs and not tabs:isSingle() then
+        return
+    end
+
     local pos = pos or track_x
     istrack = istrack or track.track
+
+    local trackleft = {} --每个轨道的左边距（随窗口位置变化）
+    for i = 1, #trackSequence do
+        trackleft[trackSequence[i]] = pos + interval * (i - 1)
+    end
 
     if settings.wavfrom == 1 then
         self:drawSample(pos, istrack)
     end
 
+    love.graphics.setColor(1, 1, 1) -- 轨道线显式设色（多标签页时否则会继承 demo 遮罩颜色而不可见）
     for i = 1, #trackSequence do
         love.graphics.rectangle("line", pos + interval * (i-1), track_y,interval , track_h)
     end
@@ -168,7 +171,7 @@ function demoInEdit:draw(pos, istrack)
     local note_index = sidebar.incoming[1]               --选中的note
     if sidebar.displayed_content == "note" and           --选中note框绘制
         ChartService:getNote(note_index) and
-        ChartService:getNote(note_index):getTrack() == track.track then --框出现在编辑的note
+        ChartService:getNote(note_index):getTrack() == istrack then --框出现在编辑的note
         local sn = ChartService:getNote(note_index)
         local y = CoordinateService:toY(sn:getBeat())
         local y2 = y - note_h
@@ -235,7 +238,7 @@ function demoInEdit:draw(pos, istrack)
 
     local event_index = sidebar.incoming[1]                                  --选中的event
     if sidebar.displayed_content == "event" and ChartService:getEvent(event_index) and --选中event框绘制
-        ChartService:getEvent(event_index):getTrack() == track.track then             --框出现在编辑的event
+        ChartService:getEvent(event_index):getTrack() == istrack then             --框出现在编辑的event
         local se = ChartService:getEvent(event_index)
         local y = CoordinateService:toY(se:getBeat())
         local y2 = CoordinateService:toY(se:getBeat2())

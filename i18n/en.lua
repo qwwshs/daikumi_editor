@@ -140,5 +140,8 @@ return {
     ["delete?"] = 'delete?',  
     ["file selector"] = 'file selector',  
     ['file select'] = 'file select',  
-    ['flushed'] = 'flushed'  
+    ['flushed'] = 'flushed',
+
+    --Tabs
+    ['now_track'] = 'Current Track'
 }

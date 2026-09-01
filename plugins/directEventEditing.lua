@@ -103,6 +103,7 @@ end
 --- 绘制控制点和 bezier 曲线
 function directEventEditing:draw()
     if not self.open then return end
+    if tabs and not tabs:isSingle() then return end --多标签页时 demo 区域不可交互
     local isevent = getCurrentEvent()
     if not isevent then return end
 
@@ -131,6 +132,7 @@ end
 --- 每帧更新：处理拖拽和右键菜单
 function directEventEditing:update(dt)
     if not self.open then return end
+    if tabs and not tabs:isSingle() then return end --多标签页时 demo 区域不可交互
     local isevent = getCurrentEvent()
     if not isevent then return end
 
@@ -252,6 +254,7 @@ end
 --- 鼠标按下：检测控制点点击
 function directEventEditing:mousepressed(x, y, button, istouch, presses)
     if not self.open then return end
+    if tabs and not tabs:isSingle() then return end --多标签页时 demo 区域不可交互
     local isevent = getCurrentEvent()
     if not isevent then return end
 

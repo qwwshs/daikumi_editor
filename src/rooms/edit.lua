@@ -4,7 +4,7 @@ play = require 'src.rooms.play'
 sidebar = require 'src.rooms.sidebar'
 editTool = require 'src.rooms.editTool'
 demo = require 'src.rooms.demo'
-
+tabs = require 'src.rooms.tabs'
 
 transIndex = {
     bezier = 1, --默认贝塞尔索引
@@ -60,7 +60,9 @@ end
 
 
 edit:addGroup(play)
-edit:addGroup(sidebar)
 edit:addGroup(demo)
 edit:addGroup(editTool)
+edit:addGroup(tabs)
+edit:addGroup(sidebar)
+
 room:addRoom(edit)

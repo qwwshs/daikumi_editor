@@ -188,7 +188,7 @@ Nui:stylePush {
 }
 room:load("start")
 
-function love.load()
+function love.load(arg)
     math.randomseed(os.time()) --随机数种子
     Slab.Initialize()
     Slab.PushFont(FONT.normal)

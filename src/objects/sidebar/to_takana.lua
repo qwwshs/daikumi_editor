@@ -1,220 +1,236 @@
---takana转谱器
+local ChartService = require("src.services.chartService")
+
 local Gtakana = group:new('takana')
 Gtakana.type = "settings"
-Gtakana.frames = 30
-function Gtakana:Nui()
-    Nui:label(i18n:get('frame_rate') .. ':' .. self.frames)
-    self.frames = Nui:slider(1, self.frames, 120, 1)
-    local frames = self.frames
-    if Nui:button(i18n:get('do')) then
-        local to_ms = 1000
-        --生成takana游玩文件
-        local is_takana_chart = {}
-        local all_track = fTrack:track_get_all_track()
-        local id = 0
-        local takana = {
-            version = 2,
-            properties = {
-                offset = { value = -chart.offset, type = "offset" },
+Gtakana.frames = 30  -- 导出帧率
 
-            },
-            components = {}
-        }
+--- 坐标系变换常量
+-- 将 dakumi 坐标系转换为 Takana 坐标系
+local TAKANA_SCALE = 9
+local TAKANA_OFFSET = -4.5
 
-        takana.components[1] =
-        {
+--- 将 dakumi 坐标转换为 Takana 坐标
+-- @tparam number x dakumi x 坐标
+-- @tparam number w dakumi 宽度
+-- @treturn number lpos 左边界位置
+-- @treturn number rpos 右边界位置
+local function toTakanaCoord(x, w)
+    local lpos = x - w / 2
+    local rpos = x + w / 2
+    local x_offset = ChartService:getPreferenceField('x_offset')
+    local event_scale = ChartService:getPreferenceField('event_scale')
+    lpos = (lpos + x_offset) / event_scale * TAKANA_SCALE + TAKANA_OFFSET
+    rpos = (rpos + x_offset) / event_scale * TAKANA_SCALE + TAKANA_OFFSET
+    return lpos, rpos
+end
+
+--- 生成 Takana 谱面数据
+-- @tparam number frames 导出帧率
+-- @treturn table Takana 谱面数据
+local function generateTakanaChart(frames)
+    local to_ms = 1000
+    local all_track = fTrack:track_get_all_track()
+    local id = 0
+
+    local takana = {
+        version = 2,
+        properties = {
+            offset = { value = -ChartService:getOffset(), type = "offset" },
+        },
+        components = {}
+    }
+
+    -- 创建根组件
+    takana.components[1] = {
+        id = id,
+        model = { type = 'line' },
+        children = {}
+    }
+    id = id + 1
+
+    -- 为每个轨道创建组件
+    for i, istrack in ipairs(all_track) do
+        local track_component = {
             id = id,
-            model = { type = 'line' },
-            children = {}
+            children = {},
+            model = {
+                timeStart = 0,
+                timeEnd = math.floor(time.alltime * to_ms),
+                movement = {
+                    left = { list = {}, type = "position" },
+                    right = { list = {}, type = "position" },
+                    type = "trackEdgeMovement",
+                },
+                type = 'track'
+            }
         }
         id = id + 1
-        --先创建轨道
-        for i, v in ipairs(all_track) do
-            is_takana_chart[v] = {
-                note = {},
-                lpos = {},
-                rpos = {}
-            }
-        end
-        local track_id = 0
-        for istrack, v in pairs(is_takana_chart) do
-            v.lpos = {-10}
-            v.rpos = {-10}
-            local track_component = {
-                id = id,
-                children = {},
-                model = {
-                    timeStart = 0,
-                    timeEnd = math.floor(time.alltime * to_ms),
-                    movement = {
-                        left = {
-                            list = {},
-                            type = "position"
-                        },
-                        right = {
-                            list = {},
-                            type = "position"
-                        },
-                        type = "trackEdgeMovement",
 
+        -- 按帧率采样轨道位置
+        local prev_lpos, prev_rpos = nil, nil
+        local nowisfade = false
+
+        for istime = 0, time.alltime, 1 / frames do
+            istime = math.roundToPrecision(istime, to_ms)
+            local nowbeat = ChartService:toBeat(istime)
+            local x, w = fEvent:get(istrack, nowbeat)
+            local lpos, rpos = toTakanaCoord(x, w)
+            local track_w0thenShow = ChartService:getTrackField(istrack, 'w0thenShow')
+
+            if lpos ~= rpos or track_w0thenShow == 1 then
+                -- 轨道可见
+                if prev_lpos ~= lpos or nowisfade then
+                    track_component.model.movement.left.list[tostring(istime * to_ms)] = "v1e_(" .. lpos .. ", u)"
+                end
+                if prev_rpos ~= rpos or nowisfade then
+                    track_component.model.movement.right.list[tostring(istime * to_ms)] = "v1e_(" .. rpos .. ", u)"
+                end
+                nowisfade = false
+            elseif lpos == rpos and track_w0thenShow == 0 and not nowisfade then
+                -- 轨道消失（淡出）
+                if prev_lpos ~= lpos and prev_rpos ~= rpos then
+                    nowisfade = true
+                    track_component.model.movement.left.list[tostring(istime * to_ms)] = "v1e_(" .. TAKANA_OFFSET .. ", u)"
+                    track_component.model.movement.right.list[tostring(istime * to_ms)] = "v1e_(" .. TAKANA_OFFSET .. ", u)"
+                end
+            end
+
+            prev_lpos = lpos
+            prev_rpos = rpos
+        end
+
+        table.insert(takana.components[1].children, track_component)
+
+        -- 为该轨道添加音符
+        for j = 1, ChartService:getNoteCount() do
+            local isnote = ChartService:getNote(j)
+            if isnote:getTrack() == istrack then
+                local note_x, note_w = fEvent:get(isnote:getTrack(), isnote:getBeatValue())
+                local isDummy = (note_w == 0 or isnote:isFakeNote())
+
+                local takana_note = {
+                    id = id,
+                    model = {
+                        timeJudge = math.floor(ChartService:toTime(isnote:getBeat()) * to_ms),
+                        type = 'hit'
                     },
-                    type = 'track'
                 }
 
-            }
-            track_id = id
-            id = id + 1
-            local x, w
-            local lpos, rpos
-            local nowbeat
-            local nowisfade = false
-            for istime = 0, time.alltime, 1 / frames do
-                istime = math.roundToPrecision(istime, to_ms)
-
-                nowbeat = beat:toBeat(chart.bpm_list, istime)
-                x, w = fEvent:get(istrack, nowbeat)
-                lpos = x - w / 2
-                rpos = x + w / 2
-                --进行坐标系变换
-                lpos = (lpos + chart.preference.x_offset) / chart.preference.event_scale * 9 - 4.5
-                rpos = (rpos + chart.preference.x_offset) / chart.preference.event_scale * 9 - 4.5
-                table.insert(v.lpos, lpos)
-                table.insert(v.rpos, rpos)
-                if lpos ~= rpos or fTrack:get_track_info(istrack).w0thenShow == 1 then
-                    if v.lpos[#v.lpos] ~= v.lpos[#v.lpos - 1] or nowisfade then
-                        track_component.model.movement.left.list[tostring(istime * to_ms)] = "v1e_(" .. lpos .. ", u)"
-                    end
-                    if v.rpos[#v.rpos] ~= v.rpos[#v.rpos - 1] or nowisfade then
-                        track_component.model.movement.right.list[tostring(istime * to_ms)] = "v1e_(" .. rpos .. ", u)"
-                    end
-                    nowisfade = false
-                elseif lpos == rpos and fTrack:get_track_info(istrack).w0thenShow == 0 and not nowisfade then
-                    if v.lpos[#v.lpos] ~= v.lpos[#v.lpos - 1] and v.rpos[#v.rpos] ~= v.rpos[#v.rpos - 1] then
-                        nowisfade = true
-                        track_component.model.movement.left.list[tostring(istime * to_ms)] = "v1e_(" .. -4.5 .. ", u)"
-                        track_component.model.movement.right.list[tostring(istime * to_ms)] = "v1e_(" .. -4.5 .. ", u)"
-                        table.insert(v.lpos, -4.5)
-                        table.insert(v.rpos, -4.5)
-                    end
-                end
-            end
-
-            table.insert(takana.components[1].children, track_component)
-            local takana_note
-            for i, isnote in ipairs(chart.note) do
-                if isnote:getTrack() == istrack then
-                    takana_note = {
-                        id = id,
-                        model = {
-                            timeJudge = math.floor(beat:toTime(chart.bpm_list, isnote:getBeat()) * to_ms),
-                            type = 'hit'
-                        },
+                if isDummy then
+                    takana_note.model.properties = {
+                        isDummy = { value = true, type = 'dummyFlag' }
                     }
-                    local x, w = fEvent:get(isnote:getTrack(), isnote:getBeatValue())
-
-                    if w == 0 or isnote:isFakeNote() then
-                        takana_note.model.properties = {}
-                        takana_note.model.properties.isDummy = {
-                            value = true,
-                            type = 'dummyFlag'
-                        }
-                    end
-                    if isnote:isHold() then
-                        takana_note.model.timeEnd = math.floor(beat:toTime(chart.bpm_list, isnote:getBeat2()) * to_ms)
-                    end
-                    if isnote:isNote() then
-                        takana_note.model.hitType = 'Tap'
-                    elseif isnote:isWipe() then
-                        takana_note.model.hitType = 'Slide'
-                    elseif isnote:isHold() then
-                        takana_note.model.type = 'hold'
-                        if isnote:getNoteHead() == 1 then
-                            local hold_note = {
-                                id = id,
-                                model = {
-                                    timeJudge = math.floor(beat:toTime(chart.bpm_list, isnote:getBeat()) * to_ms),
-                                    type = 'hit',
-                                    hitType = 'Tap'
-                                },
-                            }
-                            if w == 0 or isnote:isFakeNote() then
-                                hold_note.model.properties = {}
-                                hold_note.model.properties.isDummy = {
-                                    value = true,
-                                    type = 'dummyFlag'
-                                }
-                            end
-                            table.insert(takana.components[1].children[#takana.components[1].children].children,
-                                hold_note)
-                            id = id + 1
-                        end
-                        if isnote:getWipeHead() == 1 then
-                            local hold_note = {
-                                id = id,
-                                model = {
-                                    timeJudge = math.floor(beat:toTime(chart.bpm_list, isnote:getBeat()) * to_ms),
-                                    type = 'hit',
-                                    hitType = 'Slide'
-                                },
-                            }
-                            if w == 0 or isnote:isFakeNote() then
-                                hold_note.model.properties = {}
-                                hold_note.model.properties.isDummy = {
-                                    value = true,
-                                    type = 'dummyFlag'
-                                }
-                            end
-                            table.insert(takana.components[1].children[#takana.components[1].children].children,
-                                hold_note)
-                            id = id + 1
-                        end
-                    end
-                    table.insert(takana.components[1].children[#takana.components[1].children].children, takana_note)
-                    id = id + 1
                 end
+
+                -- 根据音符类型设置 Takana 类型
+                if isnote:isNote() then
+                    takana_note.model.hitType = 'Tap'
+                elseif isnote:isWipe() then
+                    takana_note.model.hitType = 'Slide'
+                elseif isnote:isHold() then
+                    takana_note.model.type = 'hold'
+                    takana_note.model.timeEnd = math.floor(ChartService:toTime(isnote:getBeat2()) * to_ms)
+
+                    -- hold 头部可以附加 note 或 wipe
+                    if isnote:getNoteHead() == 1 then
+                        local hold_note = {
+                            id = id,
+                            model = {
+                                timeJudge = math.floor(ChartService:toTime(isnote:getBeat()) * to_ms),
+                                type = 'hit',
+                                hitType = 'Tap'
+                            },
+                        }
+                        if isDummy then
+                            hold_note.model.properties = {
+                                isDummy = { value = true, type = 'dummyFlag' }
+                            }
+                        end
+                        table.insert(track_component.children, hold_note)
+                        id = id + 1
+                    end
+                    if isnote:getWipeHead() == 1 then
+                        local hold_note = {
+                            id = id,
+                            model = {
+                                timeJudge = math.floor(ChartService:toTime(isnote:getBeat()) * to_ms),
+                                type = 'hit',
+                                hitType = 'Slide'
+                            },
+                        }
+                        if isDummy then
+                            hold_note.model.properties = {
+                                isDummy = { value = true, type = 'dummyFlag' }
+                            }
+                        end
+                        table.insert(track_component.children, hold_note)
+                        id = id + 1
+                    end
+                end
+
+                table.insert(track_component.children, takana_note)
+                id = id + 1
             end
         end
+    end
 
-        local name = 'ravage'
-        local dakumi_name = chart.info.chart_name:lower()
+    return takana
+end
 
-        --生成配置文件
-        local level = 5
-        for i, v in ipairs({ 'normal', 'hard', 'master', 'insanity', 'ravage' }) do
-            if string.find(dakumi_name, v) then
-                level = i
-                name = v
-            end
+--- 生成歌曲信息 YAML
+-- @treturn table 歌曲信息表
+local function generateSongInfo()
+    local songinfo = {
+        id = '',
+        title = { en = ChartService:getInfoField('song_name') },
+        composer = { en = ChartService:getInfoField('artist') },
+        illustrator = {},
+        bpmDisplay = ChartService:getBpm(1).bpm,
+        description = {},
+        difficulties = {}
+    }
+
+    -- 根据谱面名推断难度等级
+    local level = 5
+    local name = 'ravage'
+    local dakumi_name = ChartService:getInfoField('chart_name'):lower()
+    for i, v in ipairs({ 'normal', 'hard', 'master', 'insanity', 'ravage' }) do
+        if string.find(dakumi_name, v) then
+            level = i
+            name = v
         end
+    end
 
-        local songinfo =
-        {
-            id = '',
-            title = { en = chart.info.song_name },
-            composer = { en = chart.info.artist },
-            illustrator = {},
-            bpmDisplay = chart.bpm_list[1].bpm,
-            description = {},
-            difficulties = {}
-        }
-        songinfo.difficulties[level] = {
-            levelDisplay = string.match(chart.info.chart_name, "Lv%.(.+)"),
-            charter = { en = chart.info.chartor }
-        }
-        local preference = {
-            difficulty = level,
-            offset = -chart.offset,
-            musicVolumePercent = 100,
-            speed = 0,
-            timeGridLineCount = 4,
-            widthGridInterval = 1.5,
-            widthGridOffset = 0,
-            bpmList = {}
-        }
-        for i, v in ipairs(chart.bpm_list) do
-            preference.bpmList[beat:toTime(chart.bpm_list, v.beat)] = v.bpm
-        end
-        local t3proj = [[# Setting_T3ProjSetting_音源文件名称 | 以下文件需要附带文件后缀名
+    songinfo.difficulties[level] = {
+        levelDisplay = string.match(ChartService:getInfoField('chart_name'), "Lv%.(.+)"),
+        charter = { en = ChartService:getInfoField('chartor') }
+    }
+
+    return songinfo, level, name
+end
+
+--- 生成偏好设置 YAML
+-- @treturn table 偏好设置表
+local function generatePreference()
+    local preference = {
+        difficulty = 1,
+        offset = -ChartService:getOffset(),
+        musicVolumePercent = 100,
+        speed = 0,
+        timeGridLineCount = 4,
+        widthGridInterval = 1.5,
+        widthGridOffset = 0,
+        bpmList = {}
+    }
+    for i = 1, ChartService:getBpmCount() do
+        local v = ChartService:getBpm(i)
+        preference.bpmList[ChartService:toTime(v.beat)] = v.bpm
+    end
+    return preference
+end
+
+--- 项目配置文件模板
+local t3proj_template = [[# Setting_T3ProjSetting_音源文件名称 | 以下文件需要附带文件后缀名
 musicFileName: music.mp3
 # Setting_T3ProjSetting_封面文件名称
 coverFileName: cover.jpg
@@ -229,43 +245,62 @@ masterChartFileName: master
 insanityChartFileName: insanity
 ravageChartFileName: ravage
 ]]
+
+--- 渲染导出 UI 并执行导出
+function Gtakana:Nui()
+    Nui:label(i18n:get('frame_rate') .. ':' .. self.frames)
+    self.frames = Nui:slider(1, self.frames, 120, 1)
+
+    if Nui:button(i18n:get('do')) then
+        -- 生成所有数据
+        local takana = generateTakanaChart(self.frames)
+        local songinfo, level, name = generateSongInfo()
+        local preference = generatePreference()
+
+        -- 确定导出路径
         local music_path = menu.chartTab[menu.selectMusicPos]
-        local lastSlashIndex = string.find(music_path, "/[^/]*$") --找到最后一个斜杠的位置
+        local lastSlashIndex = string.find(music_path, "/[^/]*$")
         if not lastSlashIndex then
-            lastSlashIndex = string.find(music_path, "\\[^\\]*$") --找到最后一个斜杠的位置
+            lastSlashIndex = string.find(music_path, "\\[^\\]*$")
         end
         if not lastSlashIndex then
             lastSlashIndex = 0
         end
-        --创建文件夹
         local ispath = PATH.usersPath.export .. string.sub(music_path, lastSlashIndex + 1) .. '/'
+
         nativefs.mount(PATH.base)
         nativefs.createDirectory(ispath)
 
+        -- 清空导出目录
         for i, v in ipairs(nativefs.getDirectoryItems(ispath)) do
-            love.filesystem.remove(ispath .. v) --删除文件
+            love.filesystem.remove(ispath .. v)
         end
 
-        nativefs.newFile(ispath .. '.t3proj') --复制到当前文件夹下
-        nativefs.write(ispath .. '.t3proj',t3proj)
+        -- 写入配置文件
+        nativefs.newFile(ispath .. '.t3proj')
+        nativefs.write(ispath .. '.t3proj', t3proj_template)
 
-        nativefs.newFile(ispath .. 'songinfo.yaml') --复制到当前文件夹下
-        nativefs.write(ispath .. 'songinfo.yaml',yaml.to_yaml(songinfo))
+        nativefs.newFile(ispath .. 'songinfo.yaml')
+        nativefs.write(ispath .. 'songinfo.yaml', yaml.to_yaml(songinfo))
 
-        nativefs.newFile(ispath .. 'preference.yaml') --复制到当前文件夹下
-        nativefs.write(ispath .. 'preference.yaml',yaml.to_yaml(preference))
+        nativefs.newFile(ispath .. 'preference.yaml')
+        nativefs.write(ispath .. 'preference.yaml', yaml.to_yaml(preference))
 
-        nativefs.newFile(ispath .. name .. '.json') --复制到当前文件夹下
-        nativefs.write(ispath .. name .. '.json',dkjson.encode(takana, { indent = true }))
+        nativefs.newFile(ispath .. name .. '.json')
+        nativefs.write(ispath .. name .. '.json', dkjson.encode(takana, { indent = true }))
+
+        -- 复制音频文件
         if music then
-            nativefs.newFile(ispath .. 'music.' .. getFileExtension(menu.musicPath)) --复制到当前文件夹下
-            nativefs.write(ispath .. 'music.' .. getFileExtension(menu.musicPath),
-                nativefs.read(menu.musicPath))
+            local ext = getFileExtension(menu.musicPath)
+            nativefs.newFile(ispath .. 'music.' .. ext)
+            nativefs.write(ispath .. 'music.' .. ext, nativefs.read(menu.musicPath))
         end
+
+        -- 复制封面图片
         if bg then
-            nativefs.newFile(ispath .. 'cover.' .. getFileExtension(menu.bgPath)) --复制到当前文件夹下
-            nativefs.write(ispath .. 'cover.' .. getFileExtension(menu.bgPath),
-                nativefs.read(menu.bgPath))
+            local ext = getFileExtension(menu.bgPath)
+            nativefs.newFile(ispath .. 'cover.' .. ext)
+            nativefs.write(ispath .. 'cover.' .. ext, nativefs.read(menu.bgPath))
         end
 
         log("takana export done")

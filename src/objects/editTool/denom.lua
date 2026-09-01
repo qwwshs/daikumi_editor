@@ -26,6 +26,13 @@ function denom:wheelmovedInEditTool(x, y)
             self:to('denom', math.max(self.denom - 1, 1))
         end
     end
+    if self.usemouse_scale then
+        if y > 0 then
+            self:to('scale', self.scale + 0.1)
+        elseif y < 0 then
+            self:to('scale', math.max(self.scale - 0.1, 0.1))
+        end
+    end
 end
 
 function denom:wheelmovedInPlay(x, y)
@@ -89,7 +96,7 @@ function denom:Nui() --渲染
         if active == 'active' then
             mouse.cursor = 'sizens'
             if iskeyboard['ctrl'] then
-                self.usemouse_denom = true
+                self.usemouse_scale = true
             end
         end
         if Nui:button("", isImage.down) then

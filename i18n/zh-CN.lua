@@ -141,4 +141,7 @@ return {
     ["file selector"] = '文件选择器',
     ['file select'] = '文件选择',
     ['flushed'] = '刷新',
+
+    --Tabs
+    ['now_track'] = '当前轨道'
 }

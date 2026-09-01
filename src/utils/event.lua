@@ -264,10 +264,11 @@ end
 --- 点击选择事件，打开侧边栏编辑界面
 -- @tparam string eventType 事件类型
 -- @tparam number pos 屏幕 Y 坐标
+-- @tparam number|nil trackId 指定轨道（默认 track.track）
 -- @treturn number|nil 事件索引
-function event:click(eventType, pos)
+function event:click(eventType, pos, trackId)
     sidebar:to("nil")
-    local idx, foundEvent = findEventInRange(eventType, pos)
+    local idx, foundEvent = findEventInRange(eventType, pos, trackId)
     if idx then
         sidebar.displayed_content = "event" .. idx
         sidebar:to("event", idx)
@@ -279,9 +280,10 @@ end
 --- 删除指定位置的事件
 -- @tparam string eventType 事件类型
 -- @tparam number pos 屏幕 Y 坐标
-function event:delete(eventType, pos)
+-- @tparam number|nil trackId 指定轨道（默认 track.track）
+function event:delete(eventType, pos, trackId)
     sidebar:to("nil")
-    local _, foundEvent = findEventInRange(eventType, pos)
+    local _, foundEvent = findEventInRange(eventType, pos, trackId)
     if foundEvent then
         ChartService:delete(foundEvent)
     end
@@ -290,8 +292,9 @@ end
 --- 放置事件（支持长按放置头/尾）
 -- @tparam string eventType 事件类型 ("x", "w", "lpos", "rpos")
 -- @tparam number pos 屏幕 Y 坐标
+-- @tparam number|nil trackId 指定轨道（默认 track.track）
 -- @treturn boolean|nil 是否放置成功
-function event:place(eventType, pos)
+function event:place(eventType, pos, trackId)
     if not table.find(trackSequence, eventType) or eventType == 'note' then
         log('event type is note')
         return
@@ -303,7 +306,7 @@ function event:place(eventType, pos)
         -- 放置事件头
         event.local_event = Event.new()
         event.local_event:setType(eventType)
-        event.local_event:setTrack(track.track)
+        event.local_event:setTrack(trackId or track.track)
         event.local_event:setBeat({ event_beat[1], event_beat[2], event_beat[3] })
         event.local_event:setEasings(transIndex.easings)
         event.local_event:setTransData(table.copy(event.bezier[transIndex.bezier]) or { 0, 0, 1, 1 })

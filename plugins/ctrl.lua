@@ -45,21 +45,39 @@ ctrl.mouse_start_pos = { x = 0, y = 0, down = false }
 ctrl.meta_copy_tab = {
     note = {},
     event = {},
+    note_tracks = {},   -- 与 note 并行的轨道数组（框选时的实际轨道）
+    event_tracks = {},  -- 与 event 并行的轨道数组
+    note_tabidx = {},   -- 与 note 并行的标签页下标数组
+    event_tabidx = {},  -- 与 event 并行的标签页下标数组
     type = "",   -- 操作类型: "copy" 或 "cut"
-    pos = "",    -- 来源位置: "play" 或 "edit"
+    pos = "",    -- 来源位置: "play" 或 "edit" 或 "tabs"
 }
 
 --- 当前剪贴板数据
-ctrl.copy_tab = {
-    note = {},
-    event = {},
-    type = "",
-    pos = "",
-}
+ctrl.copy_tab = table.copy(ctrl.meta_copy_tab)
 
 -- ============================================================
 -- 剪贴板操作辅助函数
 -- ============================================================
+
+--- 按 beat 排序剪贴板（保持轨道/标签页并行数组对齐）
+local function sortCopy(istype)
+    local items = ctrl.copy_tab[istype]
+    local tracks = ctrl.copy_tab[istype .. '_tracks']
+    local tabidx = ctrl.copy_tab[istype .. '_tabidx']
+    local order = {}
+    for i = 1, #items do order[i] = i end
+    table.sort(order, function(a, b) return items[a]:getBeatValue() < items[b]:getBeatValue() end)
+    local nitems, ntracks, ntabidx = {}, {}, {}
+    for i, idx in ipairs(order) do
+        nitems[i] = items[idx]
+        ntracks[i] = tracks[idx]
+        ntabidx[i] = tabidx[idx]
+    end
+    ctrl.copy_tab[istype] = nitems
+    ctrl.copy_tab[istype .. '_tracks'] = ntracks
+    ctrl.copy_tab[istype .. '_tabidx'] = ntabidx
+end
 
 --- 从剪贴板中移除指定元素
 -- @tparam table new_table 要移除的元素
@@ -69,6 +87,8 @@ function ctrl:copy_sub(new_table, istype)
     for i, v in ipairs(self.copy_tab[istype]) do
         if self.copy_tab[istype][i] == new_table then
             table.remove(self.copy_tab[istype], i)
+            table.remove(self.copy_tab[istype .. '_tracks'], i)
+            table.remove(self.copy_tab[istype .. '_tabidx'], i)
             return
         end
     end
@@ -77,7 +97,9 @@ end
 --- 向剪贴板添加元素（去重）
 -- @tparam table new_table 要添加的元素
 -- @tparam string istype 类型 ("note" 或 "event")
-function ctrl:copy_add(new_table, istype)
+-- @tparam number|nil track 元素所在实际轨道
+-- @tparam number|nil tabidx 元素所在标签页下标
+function ctrl:copy_add(new_table, istype, track, tabidx)
     if istype ~= "note" and istype ~= "event" then return end
     for i = 1, #self.copy_tab[istype] do
         if self.copy_tab[istype][i] == new_table then
@@ -85,9 +107,9 @@ function ctrl:copy_add(new_table, istype)
         end
     end
     self.copy_tab[istype][#self.copy_tab[istype] + 1] = new_table
-    table.sort(self.copy_tab[istype], function(a, b)
-        return a:getBeatValue() < b:getBeatValue()
-    end)
+    self.copy_tab[istype .. '_tracks'][#self.copy_tab[istype .. '_tracks'] + 1] = track or 0
+    self.copy_tab[istype .. '_tabidx'][#self.copy_tab[istype .. '_tabidx'] + 1] = tabidx or 1
+    sortCopy(istype)
 end
 
 --- 检查元素是否在剪贴板中
@@ -144,16 +166,34 @@ function ctrl:draw()
     end
 
     -- 标记 edit 区域中的 note
-    for i = 1, #self.copy_tab.note do
-        local n = self.copy_tab.note[i]
-        local y = CoordinateService:toY(n:getBeat())
-        local y2 = y - note_h
-        if n:isHold() then
-            y2 = CoordinateService:toY(n:getBeat2())
+    if tabs and not tabs:isSingle() then
+        -- 多标签页：按标签页位置绘制（仅记录过标签页下标的项）
+        for i = 1, #self.copy_tab.note do
+            local n = self.copy_tab.note[i]
+            local ti = self.copy_tab.note_tabidx[i]
+            if ti then
+                local y = CoordinateService:toY(n:getBeat())
+                local y2 = y - note_h
+                if n:isHold() then
+                    y2 = CoordinateService:toY(n:getBeat2())
+                end
+                if y > 0 - note_h and y2 < WINDOW.h + note_h then
+                    love.graphics.rectangle("fill", tabs:windowX(ti), y2, note_w, y - y2)
+                end
+            end
         end
-        if n:getTrack() == track.track then
-            if y > 0 - note_h and y2 < WINDOW.h + note_h then
-                love.graphics.rectangle("fill", play.layout.edit.x, y2, note_w, y - y2)
+    else
+        for i = 1, #self.copy_tab.note do
+            local n = self.copy_tab.note[i]
+            local y = CoordinateService:toY(n:getBeat())
+            local y2 = y - note_h
+            if n:isHold() then
+                y2 = CoordinateService:toY(n:getBeat2())
+            end
+            if n:getTrack() == track.track then
+                if y > 0 - note_h and y2 < WINDOW.h + note_h then
+                    love.graphics.rectangle("fill", play.layout.edit.x, y2, note_w, y - y2)
+                end
             end
         end
     end
@@ -184,14 +224,39 @@ function ctrl:draw()
     end
 
     -- 标记 edit 区域中的 event
-    for i = 1, #self.copy_tab.event do
-        local e = self.copy_tab.event[i]
-        local y = CoordinateService:toY(e:getBeat())
-        local y2 = CoordinateService:toY(e:getBeat2())
-        local x_pos = trackSequence:getRange(e:getType())
-        if e:getTrack() == track.track then
-            if math.intersect(y, y2, 0 - note_h, WINDOW.h + note_h) then
-                love.graphics.rectangle("fill", x_pos, y2, note_w, y - y2)
+    if tabs and not tabs:isSingle() then
+        -- 多标签页：按标签页位置与事件类型轨道绘制
+        for i = 1, #self.copy_tab.event do
+            local e = self.copy_tab.event[i]
+            local ti = self.copy_tab.event_tabidx[i]
+            if ti then
+                local lane_k
+                for k = 1, #tabs.layout.lane do
+                    if tabs.layout.lane[k] == e:getType() then
+                        lane_k = k
+                        break
+                    end
+                end
+                if lane_k then
+                    local y = CoordinateService:toY(e:getBeat())
+                    local y2 = CoordinateService:toY(e:getBeat2())
+                    local x_pos = tabs:windowX(ti) + play.layout.edit.interval * (lane_k - 1)
+                    if math.intersect(y, y2, 0 - note_h, WINDOW.h + note_h) then
+                        love.graphics.rectangle("fill", x_pos, y2, note_w, y - y2)
+                    end
+                end
+            end
+        end
+    else
+        for i = 1, #self.copy_tab.event do
+            local e = self.copy_tab.event[i]
+            local y = CoordinateService:toY(e:getBeat())
+            local y2 = CoordinateService:toY(e:getBeat2())
+            local x_pos = trackSequence:getRange(e:getType())
+            if e:getTrack() == track.track then
+                if math.intersect(y, y2, 0 - note_h, WINDOW.h + note_h) then
+                    love.graphics.rectangle("fill", x_pos, y2, note_w, y - y2)
+                end
             end
         end
     end
@@ -203,27 +268,45 @@ end
 
 --- 鼠标按下：单选（右键）或开始框选（左键）
 function ctrl:mousepressed(x, y, button)
+    -- 标签条/拖动条区域不允许选择
+    if mouse.y < play.layout.y then return end
+
     -- 右键单选
     if love.mouse.isDown(2) then
-        local track_type = trackSequence:getType(mouse.x)
-        if not track_type then return end
+        local track_type
+        local istrack = track.track
+        local tabidx = nil
+        if tabs and not tabs:isSingle() then
+            -- 多标签页：解析鼠标所在窗口的轨道与标签页
+            local ti, lane = tabs:getLane(mouse.x, mouse.y)
+            if not lane then return end
+            local tab = tabs.list[ti]
+            if not tab.copy[lane] then return end
+            track_type = lane
+            istrack = tabs:getTabTrack(tab)
+            tabidx = ti
+            self.copy_tab.pos = 'tabs'
+        else
+            track_type = trackSequence:getType(mouse.x)
+            if not track_type then return end
+        end
 
         if track_type == 'note' then
-            local note_idx = fNote:click(mouse.y)
+            local note_idx = fNote:click(mouse.y, istrack)
             if note_idx then
                 if self:copy_exist(ChartService:getNote(note_idx), "note") then
                     self:copy_sub(ChartService:getNote(note_idx), "note")
                 else
-                    self:copy_add(ChartService:getNote(note_idx), "note")
+                    self:copy_add(ChartService:getNote(note_idx), "note", istrack, tabidx or 1)
                 end
             end
         else
-            local event_idx = fEvent:click(track_type, mouse.y)
+            local event_idx = fEvent:click(track_type, mouse.y, istrack)
             if event_idx then
                 if self:copy_exist(ChartService:getEvent(event_idx), "event") then
                     self:copy_sub(ChartService:getEvent(event_idx), "event")
                 else
-                    self:copy_add(ChartService:getEvent(event_idx), "event")
+                    self:copy_add(ChartService:getEvent(event_idx), "event", istrack, tabidx or 1)
                 end
             end
         end
@@ -329,13 +412,62 @@ local function selectInEventTrack(x, start_x, min_y_beat, max_y_beat)
     end
 end
 
+--- 在多标签页 edit 区域框选（可跨标签页，仅可复制的轨道参与）
+-- @tparam number selx1 框选左 x（原始屏幕坐标）
+-- @tparam number selx2 框选右 x（原始屏幕坐标）
+-- @tparam number min_y_beat 最小 beat 值
+-- @tparam number max_y_beat 最大 beat 值
+local function selectInTabs(selx1, selx2, min_y_beat, max_y_beat)
+    ctrl.copy_tab.pos = 'tabs'
+    local interval = play.layout.edit.interval
+    for ti = 1, #tabs.list do
+        local tab = tabs.list[ti]
+        local istrack = tabs:getTabTrack(tab)
+        local wx = tabs:windowX(ti)
+        for k = 1, 5 do
+            local lane = tabs.layout.lane[k]
+            local lx1 = wx + interval * (k - 1)
+            local lx2 = wx + interval * k
+            if math.intersect(selx1, selx2, lx1, lx2) then
+                if lane == 'note' then
+                    if tab.copy.note then
+                        for i = 1, ChartService:getNoteCount() do
+                            local n = ChartService:getNote(i)
+                            local isbeat = n:getBeatValue()
+                            local isbeat2 = isbeat
+                            if n:isHold() then isbeat2 = n:getBeat2Value() end
+                            if math.intersect(min_y_beat, max_y_beat, isbeat, isbeat2) and istrack == n:getTrack() then
+                                ctrl:copy_add(n:copy(), 'note', istrack, ti)
+                            end
+                            if isbeat > max_y_beat then break end
+                        end
+                    end
+                else
+                    if tab.copy[lane] then
+                        for i = 1, ChartService:getEventCount() do
+                            local e = ChartService:getEvent(i)
+                            local isbeat = e:getBeatValue()
+                            local isbeat2 = e:getBeat2Value()
+                            if math.intersect(min_y_beat, max_y_beat, isbeat, isbeat2) and istrack == e:getTrack() and
+                                e:getType() == lane then
+                                ctrl:copy_add(e:copy(), 'event', istrack, ti)
+                            end
+                            if e:getBeatValue() > max_y_beat then break end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 --- 鼠标释放：确认框选
 function ctrl:mousereleased(x, y)
     if not (input('select') and love.mouse.isDown(1)) then
         return
     end
     messageBox:add('select')
-    self.copy_tab = { note = {}, event = {} }
+    self.copy_tab = table.copy(self.meta_copy_tab)
 
     local min_x = fTrack:to_play_track(fTrack:to_chart_track(math.min(x, self.mouse_start_pos.x)), 1)
     local max_x = fTrack:to_play_track(fTrack:to_chart_track(math.max(x, self.mouse_start_pos.x)), 1)
@@ -346,6 +478,17 @@ function ctrl:mousereleased(x, y)
     local edit_end = play.layout.edit.x + play.layout.edit.interval * 5
     local note_track_end = play.layout.edit.x + play.layout.edit.interval
     local event_track_start = play.layout.edit.x + play.layout.edit.interval
+
+    if tabs and not tabs:isSingle() then
+        -- 多标签页：跨标签页框选，demo 区域不可交互
+        local selx1 = math.min(x, self.mouse_start_pos.x)
+        local selx2 = math.max(x, self.mouse_start_pos.x)
+        selectInTabs(selx1, selx2, min_y_beat, max_y_beat)
+        if #self.copy_tab.event > 0 then
+            sidebar:to('events')
+        end
+        return
+    end
 
     if not math.intersect(x, self.mouse_start_pos.x, edit_start, edit_end) then
         -- 在 play 区域框选
@@ -372,9 +515,13 @@ end
 -- 滚轮事件处理
 -- ============================================================
 
---- 鼠标滚轮：调整 beat 位置
+--- 鼠标滚轮：调整 beat 位置（仅框选过程中）
 function ctrl:wheelmoved(x, y)
+    if not self.mouse_start_pos.down then return end
     local temp = settings.contact_roller
+    if input('accelerate') then
+        temp = temp * 4
+    end
     music_play = false
     if y > 0 then
         temp = temp / denom.denom
@@ -430,7 +577,7 @@ local function handleDelete()
     end
 
     ChartService:pop()
-    ctrl.copy_tab = { note = {}, event = {}, type = "", pos = "" }
+    ctrl.copy_tab = table.copy(ctrl.meta_copy_tab)
 end
 
 --- 处理粘贴操作
@@ -471,10 +618,66 @@ local function handlePaste()
         first_beat = ctrl.copy_tab.note[1]:getBeat()
     end
 
+    -- 跨标签页粘贴：以鼠标所在标签页为锚点，按标签页下标整体平移。
+    -- 鼠标标签页参与了框选 → 内容保持各自原标签页不动；
+    -- 未参与 → 最左框选内容平移到鼠标标签页，其余内容依次顺移到后续标签页；
+    -- 目标标签页不存在的内容不粘贴；鼠标不在任何标签页上时保持各自原标签页
+    local is_tabs_paste = ctrl.copy_tab.pos == 'tabs'
+    if is_tabs_paste then
+        local mouse_ti
+        if tabs and not tabs:isSingle() then
+            mouse_ti = tabs:getTabAtMouse()
+        end
+        -- 参照标签页：鼠标标签页参与了框选则以它自身为参照，否则取最左框选标签页
+        local ref_ti
+        if mouse_ti then
+            for i = 1, #ctrl.copy_tab.note do
+                if ctrl.copy_tab.note_tabidx[i] == mouse_ti then
+                    ref_ti = mouse_ti
+                    break
+                end
+            end
+            if not ref_ti then
+                for i = 1, #ctrl.copy_tab.event do
+                    if ctrl.copy_tab.event_tabidx[i] == mouse_ti then
+                        ref_ti = mouse_ti
+                        break
+                    end
+                end
+            end
+        end
+        if not ref_ti then
+            for i = 1, #ctrl.copy_tab.note do
+                local t = ctrl.copy_tab.note_tabidx[i] or 1
+                if not ref_ti or t < ref_ti then ref_ti = t end
+            end
+            for i = 1, #ctrl.copy_tab.event do
+                local t = ctrl.copy_tab.event_tabidx[i] or 1
+                if not ref_ti or t < ref_ti then ref_ti = t end
+            end
+        end
+        local shift = ref_ti and mouse_ti and (mouse_ti - ref_ti) or 0
+        -- 每个内容平移到目标标签页（下标 + 位移），目标标签页不存在则不粘贴
+        local function mapTabs(items, tabidxs)
+            local out = {}
+            for i = 1, #items do
+                local ti = (tabidxs[i] or 1) + shift
+                local tab = tabs and tabs.list[ti]
+                if tab then
+                    items[i]:setTrack(tabs:getTabTrack(tab))
+                    out[#out + 1] = items[i]
+                end
+            end
+            return out
+        end
+        copy_tab2.note = mapTabs(copy_tab2.note, ctrl.copy_tab.note_tabidx)
+        copy_tab2.event = mapTabs(copy_tab2.event, ctrl.copy_tab.event_tabidx)
+    end
+
     -- 调整 note 的 beat 和 track
     for i = 1, #copy_tab2.note do
         local n = copy_tab2.note[i]
-        if ctrl.copy_tab.pos ~= 'play' then
+        if ctrl.copy_tab.pos ~= 'play' and not is_tabs_paste then
             n:setTrack(track.track)
         end
         n:setBeat(beat:add(beat:sub(n:getBeat(), first_beat), to_beat))
@@ -486,7 +689,7 @@ local function handlePaste()
     -- 调整 event 的 beat、track 和翻转
     for i = 1, #copy_tab2.event do
         local isevent = copy_tab2.event[i]
-        if ctrl.copy_tab.pos ~= 'play' then
+        if ctrl.copy_tab.pos ~= 'play' and not is_tabs_paste then
             isevent:setTrack(track.track)
         end
         isevent:setBeat(beat:add(beat:sub(isevent:getBeat(), first_beat), to_beat))

@@ -4,6 +4,9 @@ function demoNowX:draw()
     if not play:mouseInPlay() then
         return
     end
+    if tabs and not tabs:isSingle() then --多标签页时 demo 区域不可交互
+        return
+    end
     love.graphics.setColor(1,1,1)
     local now_near_x = fTrack:track_get_near_fence_x()
     local now_x = math.roundToPrecision(fTrack:to_chart_track(mouse.x), 100)

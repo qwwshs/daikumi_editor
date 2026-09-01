@@ -14,22 +14,6 @@
 local function loadPlugins()
     local plugins = {}
 
-    -- 均衡器插件（sidebar group）
-    local success, result = pcall(require, "plugins.equalizer")
-    if success then
-        plugins.equalizer = result
-    else
-        log("[Plugins] Failed to load equalizer: " .. tostring(result))
-    end
-
-    -- Takana 转谱器插件（sidebar group）
-    success, result = pcall(require, "plugins.to_takana")
-    if success then
-        plugins.to_takana = result
-    else
-        log("[Plugins] Failed to load to_takana: " .. tostring(result))
-    end
-
     -- FFT 频谱分析器插件（menu object）
     success, result = pcall(require, "plugins.fft")
     if success then

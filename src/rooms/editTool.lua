@@ -87,6 +87,7 @@ function editTool:keypressed(key)
     if demo.open then
         return
     end
+    if tabs and tabs:isRenaming() then return end --标签页重命名时屏蔽快捷键
     if mouse.x >= self.layout.x + self.layout.w then return end
     self('keypressed',key)
 
@@ -104,6 +105,7 @@ function editTool:textinput(input)
     if demo.open then
         return
     end
+    if tabs and tabs:isRenaming() then return end --标签页重命名时文本只交给输入框
     self('textinput',input)
 end
 
