@@ -88,7 +88,7 @@ local function generateTakanaChart(frames)
                 nowisfade = false
             elseif lpos == rpos and track_w0thenShow == 0 and not nowisfade then
                 -- 轨道消失（淡出）
-                if prev_lpos ~= lpos and prev_rpos ~= rpos then
+                if prev_lpos ~= lpos or prev_rpos ~= rpos then
                     nowisfade = true
                     track_component.model.movement.left.list[tostring(istime * to_ms)] = "v1e_(" .. TAKANA_OFFSET .. ", u)"
                     track_component.model.movement.right.list[tostring(istime * to_ms)] = "v1e_(" .. TAKANA_OFFSET .. ", u)"
