@@ -6,7 +6,6 @@ buttonSave.time = 0 --保存时间
 buttonSave.type = 'button'
 buttonSave.text = ''
 buttonSave.img = isImage.save
-
 function buttonSave:click(isAutoSave)
     if isAutoSave then
         messageBox:add("auto save")
@@ -16,6 +15,7 @@ function buttonSave:click(isAutoSave)
         ChartService:save("chart.json")
         messageBox:add("save")
     end
+    self.sound:setVolume(settings.beep_volume / 100)
     self.sound:seek(0)
     self.sound:play()
 end
