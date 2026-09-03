@@ -1,8 +1,8 @@
 return {
     x = 0,
-    y = 0,
+    y = 170 + 22,
     w = 1200,
-    h = 900,
+    h = 900 - 170 - 22,
     right_boundary = 1200,
     left_boundary = 0,
     demo = {

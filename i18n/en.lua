@@ -3,6 +3,7 @@ return {
     ['judge_line_y'] = 'judge line y',  
     ['music_volume'] = 'music volume',  
     ['hit_volume'] = 'hit volume',  
+    ['beep_volume'] = 'beep volume',
     ['hit'] = 'hit',  
     ['hit_sound'] = 'hit sound',  
     ['hit_time'] = 'hit time',  

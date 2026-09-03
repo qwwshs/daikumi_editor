@@ -3,6 +3,7 @@ return {
     ['judge_line_y'] = '判定线y坐标',
     ['music_volume'] = '音乐音量',
     ['hit_volume'] = '打击音量',
+    ['beep_volume'] = '提示音量',
     ['hit'] = '打击',
     ['hit_sound'] = '打击音',
     ['hit_time'] = '打击时长',  

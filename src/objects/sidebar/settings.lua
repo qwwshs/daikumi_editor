@@ -21,7 +21,7 @@ local default_trans_index = 1
 if settings.default_trans_type == 'bezier' then
     default_trans_index = 2
 end
-
+--排版模式：属性，ui类型，后续内容combobox的选项，combobox的索引
 Gsettings.setting_type = { --类型
     { 'hit',            "switch" },
     { 'hit_sound',      "switch" },
@@ -33,6 +33,7 @@ Gsettings.setting_type = { --类型
     { 'contact_roller', "edit" },
     { 'auto_save',      "switch" },
     { 'default_trans_type', "combobox", { 'easings', 'bezier' }, default_trans_index },
+    {'beep_volume', "PercentageSlider"},
     { '',               'separator' },
     { 'bg_alpha',       "PercentageSlider" },
     { 'denom_alpha',    "PercentageSlider" },

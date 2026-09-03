@@ -198,6 +198,7 @@ meta_settings = {
         judge_line_y = 700,             -- 判定线 Y 坐标
         music_volume = 100,             -- 音乐音量 (0-100)
         hit_volume = 100,               -- 打击音效音量 (0-100)
+        beep_volume = 100,                 --提示音效音量 (0-100)
         hit = 0,                        -- 打击音效类型
         hit_sound = 0,                  -- 打击音效索引
         hit_time = 0.5,                 -- 打击音效持续时间
