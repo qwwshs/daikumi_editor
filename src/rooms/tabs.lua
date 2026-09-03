@@ -384,7 +384,7 @@ function tabs:update(dt)
             if tab.renaming then
                 -- 轨道号输入框（内嵌标题行，标签页背景不透明，内容清晰可见）
                 Nui:layoutRow('dynamic', ly.titleH - 6, 1)
-                Nui:edit('simple', tab.renameBuf)
+                ui:edit('simple', tab.renameBuf)
             else
                 -- 标题 + 关闭按钮
                 Nui:layoutRow('dynamic', ly.titleH - 6, { (ly.tabW - ly.closeW) / ly.tabW, ly.closeW / ly.tabW })

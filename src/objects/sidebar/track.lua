@@ -50,12 +50,12 @@ function Gtrack:NuiNext() --用于书写筛选条件
 
         Nui:layoutRow('dynamic', layout.uiH, layout.cols)
         Nui:label('x')
-        Nui:edit('field', self.range.x.from)
-        Nui:edit('field', self.range.x.to)
+        ui:edit('field', self.range.x.from)
+        ui:edit('field', self.range.x.to)
 
         Nui:label('w')
-        Nui:edit('field', self.range.w.from)
-        Nui:edit('field', self.range.w.to)
+        ui:edit('field', self.range.w.from)
+        ui:edit('field', self.range.w.to)
         Nui:windowEnd()
     end
 end

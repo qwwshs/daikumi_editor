@@ -57,7 +57,7 @@ function GchartInfo:Nui()
     Nui:label(i18n:get'music')
     editTextField(self.song_name_v)
     Nui:label(i18n:get'offset(ms)')
-    Nui:edit('field',self.offset)
+    ui:edit('field',self.offset)
 
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols) --换两行
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
@@ -84,10 +84,10 @@ function GchartInfo:Nui()
 
     for i,v in ipairs(self.bpmList) do
         Nui:label(i)
-        Nui:edit('field',v.bpm)
-        Nui:edit('field',v.beat[1])
-        Nui:edit('field',v.beat[2])
-        Nui:edit('field',v.beat[3])
+        ui:edit('field',v.bpm)
+        ui:edit('field',v.beat[1])
+        ui:edit('field',v.beat[2])
+        ui:edit('field',v.beat[3])
         if Nui:button(i18n:get('sub')) then
             table.remove(self.bpmList,i)
         end

@@ -12,9 +12,9 @@ end
 function Gpreference:Nui()
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
     Nui:label(i18n:get"x_offset")
-    Nui:edit('field',self.x_offset_v)
+    ui:edit('field',self.x_offset_v)
     Nui:label(i18n:get"event_scale")
-    Nui:edit('field',self.event_scale_v)
+    ui:edit('field',self.event_scale_v)
 
     if ui:tip(i18n:get('save')) then
         local old = ChartService:getPreferenceField('x_offset')

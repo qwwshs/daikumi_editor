@@ -186,19 +186,19 @@ function Gevents:Nui()
     end
 
     Nui:label(i18n:get("perturbation"))
-    Nui:edit('field',self.perturbationv)
+    ui:edit('field',self.perturbationv)
     self.perturbation = tonumber(self.perturbationv.value) or 0
 
     Nui:label(i18n:get("from"))
-    Nui:edit('field',self.fromv)
+    ui:edit('field',self.fromv)
     self.from = tonumber(self.fromv.value) or 0
     
     Nui:label(i18n:get("to"))
-    Nui:edit('field',self.tov)
+    ui:edit('field',self.tov)
     self.to = tonumber(self.tov.value) or 0
     
     Nui:label(i18n:get("trans_expression"))
-    local _,c = Nui:edit('field',self.trans_expression)
+    local _,c = ui:edit('field',self.trans_expression)
 
     if c then
         self:transDo()

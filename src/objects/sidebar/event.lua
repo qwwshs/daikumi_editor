@@ -48,7 +48,7 @@ end
 
 function Gevent:transTypeIsBezier()
     Nui:label(i18n:get("trans"))
-    Nui:edit('field',self.transv)
+    ui:edit('field',self.transv)
     local changed = Nui:slider(1,self.bezier_index,#self.bezier,1)
     if changed then
         transIndex.bezier = self.bezier_index.value
@@ -141,13 +141,13 @@ end
 function Gevent:Nui()
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
     Nui:label(i18n:get("from"))
-    Nui:edit('field',self.fromv)
+    ui:edit('field',self.fromv)
     if Nui:button(i18n:get("same_as_below")) then --同下
         self.fromv.value = self.tov.value
     end
 
     Nui:label(i18n:get("to"))
-    Nui:edit('field',self.tov)
+    ui:edit('field',self.tov)
     if Nui:button(i18n:get("ditto")) then --同上
         self.tov.value = self.fromv.value
     end

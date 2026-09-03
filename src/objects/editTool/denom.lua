@@ -71,7 +71,7 @@ function denom:Nui() --渲染
             self.denom = self.denom + 1
             self.useToDenom.value = tostring(self.denom)
         end
-        local active, changed = Nui:edit('field', self.useToDenom)
+        local active, changed = ui:edit('field', self.useToDenom)
         if active == 'active' then
             mouse.cursor = 'sizens'
             if iskeyboard['ctrl'] then
@@ -92,7 +92,7 @@ function denom:Nui() --渲染
             self.scale = self.scale + 0.1
             self.useToScale.value = tostring(self.scale)
         end
-        local active = Nui:edit('field', self.useToScale)
+        local active = ui:edit('field', self.useToScale)
         if active == 'active' then
             mouse.cursor = 'sizens'
             if iskeyboard['ctrl'] then

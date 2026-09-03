@@ -18,4 +18,12 @@ function ui:transOrgin()
     Nui:translate((WINDOW.nowW - WINDOW.w * WINDOW.scale) / 2, (WINDOW.nowH - WINDOW.h * WINDOW.scale) / 2)
     Nui:scale(WINDOW.scale, WINDOW.scale)
 end
+
+function ui:edit(istype,vtable)
+    if iskeyboard['return'] then
+        Nui:editUnfocus()
+    end
+    return Nui:edit(istype,vtable)
+end
+
 return ui

@@ -44,7 +44,7 @@ function track:Nui() --渲染
             track.track = track.track + 1
             self.useToTrack.value = tostring(track.track)
         end
-        local active,changed = Nui:edit('field', self.useToTrack)
+        local active,changed = ui:edit('field', self.useToTrack)
         if active == 'active' then
             mouse.cursor = 'sizens'
             if iskeyboard['ctrl'] then
@@ -65,7 +65,7 @@ function track:Nui() --渲染
             track.fence = track.fence + 1
             self.useToFence.value = tostring(track.fence)
         end
-        local active,changed = Nui:edit('field', self.useToFence)
+        local active,changed = ui:edit('field', self.useToFence)
         if active == 'active' then
             mouse.cursor = 'sizens'
             if iskeyboard['ctrl'] then

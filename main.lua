@@ -240,6 +240,7 @@ function love.update(dt)
     if mouse.cursor ~= '' then
         cursor:set(mouse.cursor)
     end
+
 end
 
 function love.draw()

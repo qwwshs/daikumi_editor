@@ -34,14 +34,14 @@ function GtrackEdit:Nui()
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
 
     Nui:label(i18n:get('track_name'))
-    Nui:edit('field', self.trackName)
+    ui:edit('field', self.trackName)
 
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
     Nui:checkbox(i18n:get('do_not_hide'), self.w0thenShow)
 
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
     Nui:label(i18n:get('parent'))
-    Nui:edit('field', self.parentTrack)
+    ui:edit('field', self.parentTrack)
     
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
     Nui:checkbox(i18n:get('Scale with parent'), self.scale_with_parent)

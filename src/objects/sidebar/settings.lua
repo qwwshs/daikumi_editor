@@ -69,7 +69,7 @@ function Gsettings:Nui()
             Nui:label(i18n:get(v[1]))
         end
         if v[2] == "edit" then
-            Nui:edit('field', v)
+            ui:edit('field', v)
 
         elseif v[2] == "switch" then
             local temp = Nui:checkbox('',v.value == 1)

@@ -24,7 +24,7 @@ function speed:Nui() --渲染
             self.speed = self.speed + 0.1
             self.useToSpeed.value = tostring(self.speed)
         end
-        local active = Nui:edit('field', self.useToSpeed)
+        local active = ui:edit('field', self.useToSpeed)
         if active == 'active' then
             mouse.cursor = 'sizens'
             if iskeyboard['ctrl'] then
