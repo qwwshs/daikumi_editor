@@ -69,12 +69,20 @@ function Gsettings:Nui()
         end
         if v[2] == "edit" then
             Nui:edit('field', v)
+
         elseif v[2] == "switch" then
-            Nui:combobox(v, { 'OFF', 'ON' })
+            local temp = Nui:checkbox('',v.value == 1)
+            if temp then
+                v.value = 1
+            else
+                v.value = 0
+            end
         elseif v[2] == "combobox" then
             Nui:combobox(v, v.items)
+
         elseif v[2] == "PercentageSlider" then
             Nui:slider(0, v, 100, 1)
+
         elseif v[2] == "separator" then
             -- 获取当前widget的边界
             Nui:layoutRow('dynamic', 1, 1)
@@ -88,7 +96,7 @@ function Gsettings:Nui()
     if ui:tip(i18n:get('save')) then
         for i, v in ipairs(self.setting_type) do
             if v[2] == "switch" then
-                settings[v[1]] = v.value - 1
+                settings[v[1]] = v.value
             elseif v[2] == "combobox" then
                 settings[v[1]] = v.items[v.value]
             elseif v[2] == "PercentageSlider" then
