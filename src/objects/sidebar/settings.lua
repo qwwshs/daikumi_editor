@@ -53,7 +53,7 @@ for i, v in ipairs(Gsettings.setting_type) do
     if v[2] == "edit" then
         v.value = tostring(settings[v[1]])
     elseif v[2] == "switch" then
-        v.value = settings[v[1]] + 1
+        v.value = settings[v[1]]
     elseif v[2] == "combobox" then
         v.items = v[3]
         v.value = v[4]
