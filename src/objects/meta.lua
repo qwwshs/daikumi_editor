@@ -138,6 +138,7 @@ meta_track = {
         type = 'xw',              -- 轨道类型
         parent = 0,               -- 父轨道 ID (0=无父轨道)
         scale_with_parent = 0,    -- 是否跟随父轨道缩放 (0=否, 1=是)
+        zindex = 0                --层级
     }
 }
 

@@ -9,6 +9,7 @@ GtrackEdit.trackName = {value = ''}
 GtrackEdit.w0thenShow = {value = false}
 GtrackEdit.parentTrack = {value = 0} --为0时无父轨道
 GtrackEdit.scale_with_parent = {value = false}
+GtrackEdit.zindex = {value = 0}
 function GtrackEdit:to(istrack)
     self.track = istrack
     ChartService:ensureTrack(istrack)
@@ -46,6 +47,10 @@ function GtrackEdit:Nui()
     Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
     Nui:checkbox(i18n:get('Scale with parent'), self.scale_with_parent)
 
+    Nui:layoutRow('dynamic', self.layout.uiH, self.layout.cols)
+    Nui:label(i18n:get('zindex'))
+    ui:edit('field', self.zindex)
+
 end
 function GtrackEdit:NuiNext()
     local istrack = self.track
@@ -64,6 +69,8 @@ function GtrackEdit:NuiNext()
     end
 
     ChartService:setTrackField(istrack, 'parent', tonumber(self.parentTrack.value) or 0)
+    ChartService:setTrackField(istrack, 'zindex', tonumber(self.zindex.value) or 0)
+
 end
 
 return GtrackEdit

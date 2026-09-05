@@ -23,6 +23,9 @@ function ui:edit(istype,vtable)
     if iskeyboard['return'] then
         Nui:editUnfocus()
     end
+    if iskeyboard['ctrl'] and iskeyboard['a'] then
+        Nui:editSetSelection(0, utf8.len(vtable.value))
+    end
     return Nui:edit(istype,vtable)
 end
 

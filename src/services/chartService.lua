@@ -567,7 +567,7 @@ function ChartService:getTrackField(trackId, field)
     return chart.track[tostring(trackId)][field]
 end
 
---- 设置轨道定义字段（name / w0thenShow / type / parent / scale_with_parent）
+--- 设置轨道定义字段（name / w0thenShow / type / parent / scale_with_parent / zindex）
 -- @tparam number trackId 轨道ID
 -- @tparam string field 字段名
 -- @tparam any v 字段值

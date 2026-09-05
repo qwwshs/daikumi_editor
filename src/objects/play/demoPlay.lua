@@ -3,6 +3,7 @@ local ChartService = require("src.services.chartService")
 local CoordinateService = require("src.services.coordinateService")
 local demoPlay = object:new("demoPlay")
 local layout = require 'config.layouts.play'.demo
+local trackZindex = {} --轨道层级
 demoPlay.sw = 1
 demoPlay.sh = 1
 demoPlay.ex = 0
@@ -16,43 +17,44 @@ demoPlay.ui.holdBody = isImage.hold_body2
 demoPlay.ui.holdTail = isImage.hold_tail2
 local ui_tab = nativefs.getDirectoryItems(PATH.usersPath.ui) --得到文件夹下的所有文件
 if ui_tab and #ui_tab > 0 then
-nativefs.mount(PATH.base)
-    for i=1,#ui_tab do
+    nativefs.mount(PATH.base)
+    for i = 1, #ui_tab do
         local v = ui_tab[i]
-        if string.find(v,"note") then
-            demoPlay.ui.note = love.graphics.newImage(PATH.usersPath.ui..v)
-        elseif string.find(v,"wipe") then
-            demoPlay.ui.wipe = love.graphics.newImage(PATH.usersPath.ui..v)
-        elseif string.find(v,"holdHead") then
-            demoPlay.ui.hold = love.graphics.newImage(PATH.usersPath.ui..v)
-        elseif string.find(v,"holdBody") then
-            demoPlay.ui.holdBody = love.graphics.newImage(PATH.usersPath.ui..v)
-        elseif string.find(v,"holdTail") then
-            demoPlay.ui.holdTail = love.graphics.newImage(PATH.usersPath.ui..v)
+        if string.find(v, "note") then
+            demoPlay.ui.note = love.graphics.newImage(PATH.usersPath.ui .. v)
+        elseif string.find(v, "wipe") then
+            demoPlay.ui.wipe = love.graphics.newImage(PATH.usersPath.ui .. v)
+        elseif string.find(v, "holdHead") then
+            demoPlay.ui.hold = love.graphics.newImage(PATH.usersPath.ui .. v)
+        elseif string.find(v, "holdBody") then
+            demoPlay.ui.holdBody = love.graphics.newImage(PATH.usersPath.ui .. v)
+        elseif string.find(v, "holdTail") then
+            demoPlay.ui.holdTail = love.graphics.newImage(PATH.usersPath.ui .. v)
         end
     end
-nativefs.unmount()
+    nativefs.unmount()
 end
 
 local to3d_shader = love.graphics.newShader('src/shader/3d.glsl')
 
 
-to3d_shader:send("rectangle",layout.x, layout.y, layout.w, layout.h)
+to3d_shader:send("rectangle", layout.x, layout.y, layout.w, layout.h)
 to3d_shader:send("tanAngle", math.tan(10 / 180 * math.pi)) --透视强度
 
-function demoPlay:Setup(x,y,w,h)
+function demoPlay:Setup(x, y, w, h)
     local sw = w / layout.w
     local sh = h / layout.h
     self.ex = x
     self.ey = y
     self.sw = sw
     self.sh = sh
-    to3d_shader:send("rectangle",(WINDOW.nowW - WINDOW.scale * WINDOW.w)/2, (WINDOW.nowH - WINDOW.scale * WINDOW.h)/2,self.sw * layout.w * WINDOW.scale,self.sh * layout.h * WINDOW.scale)
+    to3d_shader:send("rectangle", (WINDOW.nowW - WINDOW.scale * WINDOW.w) / 2, (WINDOW.nowH - WINDOW.scale * WINDOW.h) /
+    2, self.sw * layout.w * WINDOW.scale, self.sh * layout.h * WINDOW.scale)
     to3d_shader:send("tanAngle", math.tan(settings.angle / 180 * math.pi)) --透视强度
     to3d_shader:send("judge", (settings.judge_line_y - layout.y) / h)
 end
 
-local previous_frame_beat = 0 -- 上一帧的节拍
+local previous_frame_beat = 0           -- 上一帧的节拍
 local previous_frame_starting_point = 1 -- 上一帧的遍历起点
 
 function demoPlay:draw()
@@ -61,88 +63,117 @@ function demoPlay:draw()
     local ex = self.ex
     local ey = self.ey
 
-    local judgePos = settings.judge_line_y *sh
+    local judgePos = settings.judge_line_y * sh
     local effect = play:get_init_effect()
     local all_track_pos = play:get_all_track_pos()
 
     local all_track = fTrack:track_get_all_track()
-    
+
     if next(all_track_pos) == nil then --没有轨道
         return
     end
 
     if demo.open then love.graphics.setShader(to3d_shader) end
     love.graphics.push()
-    love.graphics.translate(ex,ey)
+    love.graphics.translate(ex, ey)
 
 
-    love.graphics.setColor(0,0,0,0.5 * effect.track_alpha / 100 )  --底板
+    love.graphics.setColor(0, 0, 0, 0.5 * effect.track_alpha / 100) --底板
 
-    for i=1 ,#all_track do --轨道底板绘制
-            local x,w = all_track_pos[all_track[i]].track_x,all_track_pos[all_track[i]].track_w
-            x = x * sw
-            w = w * sw
+    for i = 1, #all_track do                                      --轨道底板绘制
+        local x, w = all_track_pos[all_track[i]].track_x, all_track_pos[all_track[i]].track_w
+        x = x * sw
+        w = w * sw
         if w ~= 0 then
-            love.graphics.rectangle("fill",x,0,w,judgePos*sh)
+            love.graphics.rectangle("fill", x, 0, w, judgePos * sh)
         end
     end
 
-    for i=1 ,#all_track do --轨道侧线绘制
-            local track_w0thenShow = ChartService:getTrackField(all_track[i], 'w0thenShow')
-            local track_name = ChartService:getTrackField(all_track[i], 'name')
-            local x,w = all_track_pos[all_track[i]].track_x,all_track_pos[all_track[i]].track_w
-            x = x * sw
-            w = w * sw
-            if track.track == all_track[i] and (not demo.open ) then --选择到的底板
-                love.graphics.setColor(play.colors.white_dim) 
-                love.graphics.rectangle("fill",x,0,w,WINDOW.h)
+    for i = 1, #all_track do --轨道侧线绘制
+        local track_w0thenShow = ChartService:getTrackField(all_track[i], 'w0thenShow')
+        local track_name = ChartService:getTrackField(all_track[i], 'name')
+
+        local x, w = all_track_pos[all_track[i]].track_x, all_track_pos[all_track[i]].track_w
+        x = x * sw
+        w = w * sw
+        if track.track == all_track[i] and (not demo.open) then      --选择到的底板
+            love.graphics.setColor(play.colors.white_dim)
+            love.graphics.rectangle("fill", x, 0, w, WINDOW.h)
+        end
+        if w ~= 0 then
+            love.graphics.setColor(1, 1, 1, effect.track_line_alpha / 100)  --侧线
+            love.graphics.rectangle("line", x, 0, w, WINDOW.h)
+        elseif w == 0 and track_w0thenShow == 1 then
+            love.graphics.setColor(1, 1, 1, effect.track_line_alpha / 100)  --侧线
+            love.graphics.rectangle("line", x, 0, 0.01, WINDOW.h)
+        end
+        if not demo.open then
+            love.graphics.setColor(play.colors.white)        --轨道编号 与名称
+            if track.track == all_track[i] then
+                love.graphics.setColor(play.colors.cyan)     --轨道编号
             end
-            if w ~= 0 then
-                love.graphics.setColor(1,1,1,effect.track_line_alpha / 100) --侧线
-                love.graphics.rectangle("line",x,0,w,WINDOW.h)
-            elseif w == 0 and track_w0thenShow == 1 then
-                love.graphics.setColor(1,1,1,effect.track_line_alpha / 100) --侧线
-                love.graphics.rectangle("line",x,0,0.01,WINDOW.h)
+            local str = ""
+            if track_name ~= '' then
+                str = "(" .. track_name .. ")"
             end
-            if not demo.open then
-                love.graphics.setColor(play.colors.white) --轨道编号 与名称
-                if track.track == all_track[i] then
-                    love.graphics.setColor(play.colors.cyan) --轨道编号
-                end
-                local str = ""
-                if track_name ~= '' then
-                    str = "("..track_name..")"
-                end
-                love.graphics.printf(  all_track[i]..str, x,judgePos-20,100, "center")
-            end
+            love.graphics.printf(all_track[i] .. str, x, judgePos - 20, 100, "center")
+        end
     end
 
     --游玩区域侧线
     love.graphics.setColor(play.colors.white_half)
     local x_offset = ChartService:getPreferenceField('x_offset')
     local event_scale = ChartService:getPreferenceField('event_scale')
-    local x,w = fTrack:to_play_track(-x_offset,0.002*event_scale)
-    x = x*sw
-    w = w*sw
-    love.graphics.rectangle("fill",x,0,w,WINDOW.h)
-    x,w = fTrack:to_play_track(-x_offset + event_scale,0.002*event_scale)
-    x = x*sw
-    w = w*sw
-    love.graphics.rectangle("fill",x,0,w,WINDOW.h)
+    local x, w = fTrack:to_play_track(-x_offset, 0.002 * event_scale)
+    x = x * sw
+    w = w * sw
+    love.graphics.rectangle("fill", x, 0, w, WINDOW.h)
+    x, w = fTrack:to_play_track(-x_offset + event_scale, 0.002 * event_scale)
+    x = x * sw
+    w = w * sw
+    love.graphics.rectangle("fill", x, 0, w, WINDOW.h)
 
     love.graphics.setColor(play.colors.white) --游玩区域侧线(外侧)
-    x,w = fTrack:to_play_track(-x_offset- 0.01 * event_scale,0.005 * event_scale)
-    x = x*sw
-    w = w*sw
-    love.graphics.rectangle("fill",x,0,w,WINDOW.h)
-    x,w = fTrack:to_play_track(-x_offset + 1.01 * event_scale,0.005 * event_scale)
-    x = x*sw
-    w = w*sw
-    love.graphics.rectangle("fill",x,0,w,WINDOW.h)
+    x, w = fTrack:to_play_track(-x_offset - 0.01 * event_scale, 0.005 * event_scale)
+    x = x * sw
+    w = w * sw
+    love.graphics.rectangle("fill", x, 0, w, WINDOW.h)
+    x, w = fTrack:to_play_track(-x_offset + 1.01 * event_scale, 0.005 * event_scale)
+    x = x * sw
+    w = w * sw
+    love.graphics.rectangle("fill", x, 0, w, WINDOW.h)
     
-    local note_h = settings.note_height*sh --25 * denom.scale
+    trackZindex = {} --清空轨道层级
+    local temptab = {}
+    --按zindex分组轨道
+    for i = 1, #all_track do
+        local zindex = ChartService:getTrackField(all_track[i], 'zindex')
+        if not temptab[zindex] then
+            temptab[zindex] = {}
+        end
+        temptab[zindex][#temptab[zindex] + 1] = all_track[i]
+    end
+    --按照层级大小顺序再排到trackZindex
+    local sorted_keys = {}
+    for k in pairs(temptab) do
+        table.insert(sorted_keys, k)
+    end
+    table.sort(sorted_keys)
+    for _, zindex in ipairs(sorted_keys) do
+        trackZindex[zindex] = temptab[zindex]
+    end
+    --记录轨道所属层级,note按此分组渲染
+    local track_zindex = {}
+    for _, zindex in ipairs(sorted_keys) do
+        local tracks = trackZindex[zindex]
+        for _, trackId in ipairs(tracks) do
+            track_zindex[trackId] = zindex
+        end
+    end
+
+    local note_h = settings.note_height * sh                 --25 * denom.scale
     local _width, _height = demoPlay.ui.note:getDimensions() -- 得到宽高
-    love.graphics.setColor(1,1,1,effect.note_alpha / 100)
+    love.graphics.setColor(1, 1, 1, effect.note_alpha / 100)
     local end_beat = CoordinateService:yToBeat(0)
     local noteBeat = 0
     local noteBeat2 = 0
@@ -151,12 +182,12 @@ function demoPlay:draw()
     local _scale_h2
 
     local isnote
-    local x,w,y,y2
+    local x, w, y, y2
 
     --展示侧note渲染
-    local spacing = 20*sw --note和track的间距
+    local spacing = 20 * sw --note和track的间距
 
-     --减少重复遍历
+    --减少重复遍历
     local index_start = 1
     if beat.nowbeat > previous_frame_beat then
         index_start = math.max(1, previous_frame_starting_point)
@@ -164,93 +195,117 @@ function demoPlay:draw()
     previous_frame_beat = beat.nowbeat
     previous_frame_starting_point = 0
 
-        for i = index_start, ChartService:getNoteCount() do
-            isnote = ChartService:getNote(i)
-            noteBeat = isnote:getBeatValue()
-            local beat2 = isnote:getBeat2()
-            noteBeat2 = beat2 and isnote:getBeat2Value() or noteBeat
-            if noteBeat > end_beat then break end --超过可见范围
-            local trackId = isnote:getTrack()
-            x,w =  all_track_pos[trackId].track_x,all_track_pos[trackId].track_w
-            x = x * sw
-            w = w * sw
-
-            x = x + w /2
-            if math.abs(w) > spacing*2 then --增加间隙
-                w = w - spacing * w / math.abs(w)
-            elseif math.abs(w) <= spacing*2 and math.abs(w) > spacing  then
-                w = spacing * w / math.abs(w)
+    --先按beat顺序收集可见note到各自层级(同一层级内保持beat顺序)
+    local note_layers = {}
+    for i = index_start, ChartService:getNoteCount() do
+        isnote = ChartService:getNote(i)
+        noteBeat = isnote:getBeatValue()
+        local beat2 = isnote:getBeat2()
+        noteBeat2 = beat2 and isnote:getBeat2Value() or noteBeat
+        if noteBeat > end_beat then break end     --超过可见范围
+        local trackId = isnote:getTrack()
+        y = CoordinateService:toY(noteBeat)
+        y2 = y
+        if isnote:isHold() then
+            y2 = CoordinateService:toY(noteBeat2)
+        end
+        y = y * sh
+        y2 = y2 * sh
+        if (noteBeat > beat.nowbeat or (noteBeat2 > beat.nowbeat)) and previous_frame_starting_point == 0 then
+            previous_frame_starting_point = i - 1
+        end
+        if math.intersect(0, judgePos, y, y2) and not (y > judgePos and isnote:isFakeNote()) then
+            local zindex = track_zindex[trackId] or 0
+            if not note_layers[zindex] then
+                note_layers[zindex] = {}
             end
-            x = x - w /2
-            y = CoordinateService:toY(noteBeat)
-            y2 = y
-            if isnote:isHold() then
-                y2 = CoordinateService:toY(noteBeat2)
-            end
-            y = y * sh
-            y2 = y2 * sh
-            _scale_w = 1 / _width * w
+            local layer = note_layers[zindex]
+            layer[#layer + 1] = {isnote = isnote, y = y, y2 = y2}
+        end
+    end
 
-            _scale_h = 1 / _height * note_h
-            if (noteBeat > beat.nowbeat or (noteBeat2 > beat.nowbeat)) and previous_frame_starting_point == 0 then
-                previous_frame_starting_point = i - 1
-            end
+    --按层级从低到高绘制note
+    for _, zindex in ipairs(sorted_keys) do
+        local layer = note_layers[zindex]
+        if layer then
+            for j = 1, #layer do
+                isnote = layer[j].isnote
+                y = layer[j].y
+                y2 = layer[j].y2
+                local trackId = isnote:getTrack()
+                x, w = all_track_pos[trackId].track_x, all_track_pos[trackId].track_w
+                x = x * sw
+                w = w * sw
 
-            if math.intersect(0,judgePos,y,y2) and not (y > judgePos and isnote:isFakeNote() ) then
-                if y ~= y2 and y > judgePos then y = judgePos end --hold头保持在线上
+                x = x + w / 2
+                if math.abs(w) > spacing * 2 then   --增加间隙
+                    w = w - spacing * w / math.abs(w)
+                elseif math.abs(w) <= spacing * 2 and math.abs(w) > spacing then
+                    w = spacing * w / math.abs(w)
+                end
+                x = x - w / 2
+                _scale_w = 1 / _width * w
+                _scale_h = 1 / _height * note_h
+                if y ~= y2 and y > judgePos then y = judgePos end     --hold头保持在线上
 
                 if not isnote:isHold() then
-                    love.graphics.draw(self.ui[isnote:getType()],x+w/2,y-note_h+note_h/2,effect.note_rotate,_scale_w,_scale_h,_width/2,_height/2) --后面两个值用于旋转
-                else --hold
+                    love.graphics.draw(self.ui[isnote:getType()], x + w / 2, y - note_h + note_h / 2, effect.note_rotate,
+                        _scale_w, _scale_h, _width / 2, _height / 2)                                                                                  --后面两个值用于旋转
+                else                                                                                                                                  --hold
                     _scale_h2 = 1 / _height * (y - y2 - note_h - note_h)
-                    love.graphics.draw(self.ui.hold,x,y-note_h,0,_scale_w,_scale_h)
-                    love.graphics.draw(self.ui.holdBody,x,y2+note_h,0,_scale_w,_scale_h2) --身
-                    love.graphics.draw(self.ui.holdTail,x,y2,0,_scale_w,_scale_h)
+                    love.graphics.draw(self.ui.hold, x, y - note_h, 0, _scale_w, _scale_h)
+                    love.graphics.draw(self.ui.holdBody, x, y2 + note_h, 0, _scale_w, _scale_h2) --身
+                    love.graphics.draw(self.ui.holdTail, x, y2, 0, _scale_w, _scale_h)
                     if isnote:getNoteHead() == 1 then
-                        love.graphics.draw(self.ui.note,x+w/2,y-note_h+note_h/2,effect.note_rotate,_scale_w,_scale_h,_width/2,_height/2)
+                        love.graphics.draw(self.ui.note, x + w / 2, y - note_h + note_h / 2, effect.note_rotate, _scale_w,
+                            _scale_h, _width / 2, _height / 2)
                     end
                     if isnote:getWipeHead() == 1 then
-                        love.graphics.draw(self.ui.wipe,x+w/2,y-note_h+note_h/2,effect.note_rotate,_scale_w,_scale_h,_width/2,_height/2)
+                        love.graphics.draw(self.ui.wipe, x + w / 2, y - note_h + note_h / 2, effect.note_rotate, _scale_w,
+                            _scale_h, _width / 2, _height / 2)
                     end
                 end
             end
-
         end
+    end
 
     --遮挡板
-    local start_x = fTrack:to_play_track(-x_offset,0) *sw
-    local end_x = fTrack:to_play_track(-x_offset + event_scale,0) *sw
+    local start_x = fTrack:to_play_track(-x_offset, 0) * sw
+    local end_x = fTrack:to_play_track(-x_offset + event_scale, 0) * sw
     love.graphics.setColor(play.colors.black)
-    love.graphics.rectangle("fill",start_x,judgePos,end_x - start_x,WINDOW.h - judgePos)
+    love.graphics.rectangle("fill", start_x, judgePos, end_x - start_x, WINDOW.h - judgePos)
 
     --进度条
-    local progress_bar = fTrack:to_play_track(-x_offset + event_scale * 0.2,0) *sw
+    local progress_bar = fTrack:to_play_track(-x_offset + event_scale * 0.2, 0) * sw
     love.graphics.setColor(play.colors.white)
-    love.graphics.rectangle("fill",start_x + (end_x - start_x)/2-(progress_bar*time.nowtime/time.alltime) / 2,judgePos+30,time.nowtime/time.alltime * progress_bar,5)
+    love.graphics.rectangle("fill", start_x + (end_x - start_x) / 2 - (progress_bar * time.nowtime / time.alltime) / 2,
+        judgePos + 30, time.nowtime / time.alltime * progress_bar, 5)
 
-    love.graphics.rectangle("fill",start_x + (end_x - start_x)/2-progress_bar/2,judgePos+29,1,7)
-    love.graphics.rectangle("fill",start_x + (end_x - start_x)/2+progress_bar/2,judgePos+29,1,7)
+    love.graphics.rectangle("fill", start_x + (end_x - start_x) / 2 - progress_bar / 2, judgePos + 29, 1, 7)
+    love.graphics.rectangle("fill", start_x + (end_x - start_x) / 2 + progress_bar / 2, judgePos + 29, 1, 7)
 
     --判定线
     love.graphics.setColor(play.colors.dcyan) --判定线内部
-    love.graphics.rectangle("fill",start_x,judgePos-5,end_x - start_x,10)
+    love.graphics.rectangle("fill", start_x, judgePos - 5, end_x - start_x, 10)
 
 
-    love.graphics.setColor(play.colors.white) --判定线 play
+    love.graphics.setColor(play.colors.white)                             --判定线 play
 
-    love.graphics.rectangle("line",start_x,judgePos-8,end_x - start_x,16) --8是为了对其中心
+    love.graphics.rectangle("line", start_x, judgePos - 8, end_x - start_x, 16) --8是为了对其中心
     love.graphics.pop()
     if demo.open then love.graphics.setShader() end
 end
 
 function demoPlay:settings()
     to3d_shader:send("tanAngle", math.tan(settings.angle / 180 * math.pi)) --透视强度
-        to3d_shader:send("judge", (settings.judge_line_y - layout.y) / layout.h / self.sh)
+    to3d_shader:send("judge", (settings.judge_line_y - layout.y) / layout.h / self.sh)
 end
 
 function demoPlay:resize(w, h)
     --shader需要原始坐标
     print(w, h)
-    to3d_shader:send("rectangle",(WINDOW.nowW - WINDOW.scale * WINDOW.w)/2, (WINDOW.nowH - WINDOW.scale * WINDOW.h)/2,self.sw * layout.w * WINDOW.scale,self.sh * layout.h * WINDOW.scale)
+    to3d_shader:send("rectangle", (WINDOW.nowW - WINDOW.scale * WINDOW.w) / 2, (WINDOW.nowH - WINDOW.scale * WINDOW.h) /
+    2, self.sw * layout.w * WINDOW.scale, self.sh * layout.h * WINDOW.scale)
 end
+
 return demoPlay

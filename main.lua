@@ -17,30 +17,30 @@
     - Nui: Nuklear UI 实例
 ]]
 
-DAKUMI           = { _VERSION = "0.5.0c" }         -- 版本信息
-beat             = beat                             -- 节拍计算模块（在 isRequire.lua 中初始化）
-time             = { nowtime = 0, alltime = 1 }    -- 时间状态：当前时间、总时长
+DAKUMI           = { _VERSION = "0.5.0c" }      -- 版本信息
+beat             = beat                         -- 节拍计算模块（在 isRequire.lua 中初始化）
+time             = { nowtime = 0, alltime = 1 } -- 时间状态：当前时间、总时长
 -- chart/extra_chart 已由 ChartService 私有持有，不再定义全局变量
-bg               = nil                              -- 当前背景图片
-music            = nil                              -- 当前音频源
-music_data       = nil                              -- 音频波形数据
-music_play       = false                            -- 音乐是否正在播放
+bg               = nil                          -- 当前背景图片
+music            = nil                          -- 当前音频源
+music_data       = nil                          -- 音频波形数据
+music_play       = false                        -- 音乐是否正在播放
 
 --- 鼠标状态
 mouse            = { x = 0, y = 0, down = false, cursor = '' }
-elapsed_time     = 0                               -- 应用已运行时间（秒）
+elapsed_time     = 0 -- 应用已运行时间（秒）
 
 --- 字体资源
 FONT             = {
-    normal = love.graphics.newFont("assets/fonts/LXGWNeoXiHei.ttf", 13),  -- 普通字体
-    plus = love.graphics.newFont("assets/fonts/LXGWNeoXiHei.ttf", 26),    -- 大号字体
+    normal = love.graphics.newFont("assets/fonts/LXGWNeoXiHei.ttf", 13), -- 普通字体
+    plus = love.graphics.newFont("assets/fonts/LXGWNeoXiHei.ttf", 26),   -- 大号字体
 }
 
 --- 键盘按下状态
 iskeyboard       = {}
-iskeyboard.alt   = false                           -- Alt 键是否按下
-iskeyboard.ctrl  = false                           -- Ctrl 键是否按下
-iskeyboard.shift = false                           -- Shift 键是否按下
+iskeyboard.alt   = false -- Alt 键是否按下
+iskeyboard.ctrl  = false -- Ctrl 键是否按下
+iskeyboard.shift = false -- Shift 键是否按下
 
 --- 窗口信息
 -- w/h: 设计分辨率, scale: 缩放比例, nowW/nowH: 实际窗口尺寸, fullscreen: 是否全屏
@@ -48,32 +48,32 @@ WINDOW           = { w = 1600, h = 900, scale = 1, nowW = 1600, nowH = 900, full
 
 --- 路径配置
 PATH             = {
-    i18n = 'i18n/',                                 -- 国际化文件目录
-    users = 'users/',                               -- 用户数据根目录
+    i18n = 'i18n/',                                    -- 国际化文件目录
+    users = 'users/',                                  -- 用户数据根目录
     usersPath = {
-        settings = 'users/',                        -- 设置文件
-        hit = 'users/',                             -- 打击音效
-        chart = 'users/chart/',                     -- 谱面文件
-        log = 'users/log/',                         -- 日志文件
-        export = 'users/export/',                   -- 导出文件
-        auto_save = 'users/auto_save/',             -- 自动保存
-        ui = 'users/ui/',                           -- UI 配置
-        key = 'users/',                             -- 快捷键配置
+        settings = 'users/',                           -- 设置文件
+        hit = 'users/',                                -- 打击音效
+        chart = 'users/chart/',                        -- 谱面文件
+        log = 'users/log/',                            -- 日志文件
+        export = 'users/export/',                      -- 导出文件
+        auto_save = 'users/auto_save/',                -- 自动保存
+        ui = 'users/ui/',                              -- UI 配置
+        key = 'users/',                                -- 快捷键配置
     },
-    plugins = 'plugins/',                           -- 插件目录（外部可访问）
-    editToolData = '',                              -- 编辑工具数据文件路径（运行时设置）
-    defaultBezier = '',                             -- 默认贝塞尔曲线文件路径（运行时设置）
-    base = love.filesystem.getSourceBaseDirectory(), -- 应用基础目录
+    plugins = 'plugins/',                              -- 插件目录（外部可访问）
+    editToolData = '',                                 -- 编辑工具数据文件路径（运行时设置）
+    defaultBezier = '',                                -- 默认贝塞尔曲线文件路径（运行时设置）
+    base = love.filesystem.getSourceBaseDirectory(),   -- 应用基础目录
     web = {
-        github = "https://github.com/qwwshs/daikumi/",  -- GitHub 仓库
-        dakumi = "https://dakumi.qwwshs.top"             -- 官方网站
+        github = "https://github.com/qwwshs/daikumi/", -- GitHub 仓库
+        dakumi = "https://dakumi.qwwshs.top"           -- 官方网站
     }
 }
 
 -- 将插件目录添加到 Lua 搜索路径
-package.path = PATH.plugins .. "?.lua;" .. PATH.plugins .. "?/init.lua;" .. package.path
+package.path     = PATH.plugins .. "?.lua;" .. PATH.plugins .. "?/init.lua;" .. package.path
 
-love.keyboard.setKeyRepeat(true)    -- 启用键重复（长按时连续触发）
+love.keyboard.setKeyRepeat(true) -- 启用键重复（长按时连续触发）
 love.graphics.setFont(FONT.normal)
 FONT.normal:setFilter("linear", "nearest")
 FONT.plus:setFilter("linear", "nearest")
@@ -89,14 +89,14 @@ local AudioService = require("src.services.audioService")
 
 --- 插件上下文：提供给插件的服务访问接口
 PluginManager:init({
-    chart = ChartService,       -- 谱面数据服务
-    coord = CoordinateService,  -- 坐标转换服务
-    audio = AudioService,       -- 音频服务
-    beat = beat,                -- 节拍计算模块
-    settings = nil,             -- 设置（运行时由 settings.lua 加载后赋值）
-    i18n = nil,                 -- 国际化（运行时由 i18n.lua 加载后赋值）
-    WINDOW = WINDOW,            -- 窗口信息
-    PATH = PATH,                -- 路径配置
+    chart = ChartService,      -- 谱面数据服务
+    coord = CoordinateService, -- 坐标转换服务
+    audio = AudioService,      -- 音频服务
+    beat = beat,               -- 节拍计算模块
+    settings = nil,            -- 设置（运行时由 settings.lua 加载后赋值）
+    i18n = nil,                -- 国际化（运行时由 i18n.lua 加载后赋值）
+    WINDOW = WINDOW,           -- 窗口信息
+    PATH = PATH,               -- 路径配置
 })
 
 Nui = nuklear.newUI()
@@ -143,10 +143,10 @@ Nui:stylePush {
     ['contextual button'] = { ['rounding'] = 0 },
     ['menu button'] = { ['rounding'] = 0 },
     ['selectable'] = { ['rounding'] = 0 },
-    ['slider'] = { ['rounding'] = 0 },
+    ['slider'] = { ['rounding'] = 0,},
     ['progress'] = {
         ['rounding'] = 0,
-        ['cursor rounding'] = 0
+        ['cursor rounding'] = 0,
     },
     ['property'] = {
         ['rounding'] = 0,
@@ -234,13 +234,12 @@ function love.update(dt)
     local original_x, original_y = love.mouse.getPosition() --对缩放进行处理
     mouse.x = original_x / WINDOW.scale - (WINDOW.nowW - WINDOW.w * WINDOW.scale) / 2
     mouse.y = original_y / WINDOW.scale - (WINDOW.nowH - WINDOW.h * WINDOW.scale) / 2
-    
+
     room("update", dt)
 
     if mouse.cursor ~= '' then
         cursor:set(mouse.cursor)
     end
-
 end
 
 function love.draw()

@@ -24,6 +24,7 @@ dakumi文档请于[dakumi](http://dakumi.qwwshs.top)中访问
 > [!TAP]
 > dakumi所使用的love2d版本为11.4 
 > 为了支持中文输入法 dakumi所使用的SDL2.dll是经过修改的
+> 为了支持部分功能 dakumi所使用的nuklear是经过修改的
 
 然后将dakumi打包成以下结构的zip:
 
