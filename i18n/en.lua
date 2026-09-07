@@ -21,6 +21,7 @@ return {
     ['window_height'] = 'window height',  
     ['mouse'] = 'mouse',  
     ['vsync'] = 'vsync',  
+    ['paste_preview_alpha'] = 'paste preview alpha',  
       
     -- Equalizer Panel (Gequalizer) - Audio equalizer settings  
     ['lowgain'] = 'lowgain',  

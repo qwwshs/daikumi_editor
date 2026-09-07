@@ -21,6 +21,7 @@ return {
     ['window_height'] = '窗口高度',
     ['mouse'] = '鼠标显示',
     ['vsync'] = '垂直同步',
+    ['paste_preview_alpha'] = '粘贴预览透明度',  
 
     -- Equalizer Panel (Gequalizer) - Audio equalizer settings  
     ['lowgain'] = '数字低增益',  

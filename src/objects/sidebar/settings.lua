@@ -37,6 +37,7 @@ Gsettings.setting_type = { --类型
     { '',               'separator' },
     { 'bg_alpha',       "PercentageSlider" },
     { 'denom_alpha',    "PercentageSlider" },
+    {'paste_preview_alpha', "PercentageSlider"},
     { '',               'separator' },
     { 'music_volume',   "PercentageSlider" },
     { 'track_w_scale',  "edit" },

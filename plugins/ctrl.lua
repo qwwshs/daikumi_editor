@@ -419,7 +419,7 @@ function ctrl:drawPastePreview()
     local _scale_h = note_h / ih
     local is_tabs_paste = self.copy_tab.pos == 'tabs' and tabs and not tabs:isSingle()
 
-    love.graphics.setColor(1, 1, 1, 0.5) -- 预览统一 50% 透明度
+    love.graphics.setColor(1, 1, 1, settings.paste_preview_alpha / 100)
 
     -- note ghost：跟随鼠标 beat，显示在预测的粘贴窗口/轨道上
     for i = 1, #items.note do

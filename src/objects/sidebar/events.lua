@@ -75,6 +75,7 @@ end
 function Gevents:eventsDo() --执行
     if not ctrl then return end
     local copy_table = ctrl:get_copy()
+    local before_map = {} --修改前的快照：k -> 该次 do 前的 event 副本
     for i = 1,#copy_table.event do
         for k = 1, ChartService:getEventCount() do
             if copy_table.event[i] == ChartService:getEvent(k) then
@@ -94,11 +95,26 @@ function Gevents:eventsDo() --执行
                 ((self.to - self.from) *
                 self.expression(((ce:getBeat2Value() - copy_table.event[1]:getBeatValue())/
                 (copy_table.event[#copy_table.event]:getBeat2Value() - copy_table.event[1]:getBeatValue()) )) )
+                before_map[k] = before_map[k] or ChartService:getEvent(k):copy()
                 ce:setFrom(new_from)
                 ce:setTo(new_to)
                 ChartService:getEvent(k):setFrom(new_from)
                 ChartService:getEvent(k):setTo(new_to)
             end
+        end
+    end
+    --一次 do 产生一条撤销记录（只记录实际发生变更的事件）
+    if redo and next(before_map) then
+        local add, del = {}, {}
+        for k, old in pairs(before_map) do
+            local cur = ChartService:getEvent(k)
+            if cur and not old:eq(cur) then
+                table.insert(del, old)
+                table.insert(add, cur:copy())
+            end
+        end
+        if next(add) then
+            redo:writeRevoke({add = {event = add, note = {}}, del = {event = del, note = {}}})
         end
     end
 end

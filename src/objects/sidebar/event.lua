@@ -11,6 +11,9 @@ Gevent.bezier_index = {value = 1}
 Gevent.bezier = {}
 Gevent.easings_index = {value = 1}
 local Incoming_event --传入的事件 
+local Incoming_event_before_arrival  --传入的事件 传入前
+local Incoming_event_index --传入的事件索引
+
 local meta_default_bezier = {
     __index ={
         {1,1,1,1}
@@ -31,8 +34,11 @@ end
 setmetatable(Gevent.bezier,meta_default_bezier)
 
 function Gevent:to(event_index)
+    Incoming_event_index = event_index
     local v = ChartService:getEvent(event_index)
+    if not v then log("Sidebar group event not found! event index: "..event_index) log(v) sidebar:to("nil") return end
     Incoming_event = v
+    Incoming_event_before_arrival = v:copy()
     self.fromv.value = tostring(v:getFrom())
     self.tov.value = tostring(v:getTo())
     self.transv.value = ''
@@ -221,4 +227,18 @@ function Gevent:NuiNext() --更新信息
     end
 end
 
+function Gevent:leave()
+--用于撤销
+-- directEventEditing 拖拽期间每帧 sidebar:to 会刷新本页面：
+-- 拖拽中不记录撤销（避免每帧产生一条记录），由插件在拖动完成时统一写入一次
+if directEventEditing and directEventEditing.catch_point then return end
+if Incoming_event_before_arrival == Incoming_event then return end
+Incoming_event = Incoming_event:copy()
+log(ChartService:deleteEvent(Incoming_event))
+ChartService:addEvent(Incoming_event_before_arrival)
+ChartService:push()
+ChartService:delete(Incoming_event_before_arrival)
+ChartService:add(Incoming_event)
+ChartService:pop()
+end
 return Gevent

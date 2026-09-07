@@ -131,6 +131,28 @@ end
 
 --- 每帧更新：处理拖拽和右键菜单
 function directEventEditing:update(dt)
+    -- 松手清除：拖动完成时写入一次撤销记录（还原到拖动前的快照）
+    if not love.mouse.isDown(1) and self.catch_point then
+        local cur_event = getCurrentEvent() or self.drag_event
+        if cur_event and self.drag_before and not self.drag_before:eq(cur_event) then
+            if redo then
+                redo:writeRevoke({
+                    add = { event = { cur_event:copy() }, note = {} },
+                    del = { event = { self.drag_before }, note = {} },
+                })
+            end
+        end
+        -- 仍处于 catch_point 状态时调用 sidebar:to：leave() 会忽略刷新（不产生记录），
+        -- 但 Gevent:to 会把进入基线同步为当前值，之后离开页面时不会重复记录
+        if sidebar.displayed_content == 'event' then
+            sidebar:to('event', sidebar.incoming[1])
+        end
+        self.catch_point = nil
+        self.drag_before = nil
+        self.drag_event = nil
+        return
+    end
+
     if not self.open then return end
     if tabs and not tabs:isSingle() then return end --多标签页时 demo 区域不可交互
     local isevent = getCurrentEvent()
@@ -244,11 +266,6 @@ function directEventEditing:update(dt)
         sidebar:to('event', sidebar.incoming[1])
     end
     Slab.EndWindow()
-
-    -- 松手清除
-    if not love.mouse.isDown(1) and self.catch_point then
-        self.catch_point = nil
-    end
 end
 
 --- 鼠标按下：检测控制点点击
@@ -264,12 +281,16 @@ function directEventEditing:mousepressed(x, y, button, istouch, presses)
         -- 检测头控制点
         if isMouseOnPoint(c_x, c_y, CONTROL_RADIUS) then
             self.catch_point = 'head'
+            self.drag_before = isevent:copy()
+            self.drag_event = isevent
             return
         end
 
         -- 检测尾控制点
         if isMouseOnPoint(c_x2, c_y2, CONTROL_RADIUS) then
             self.catch_point = 'tail'
+            self.drag_before = isevent:copy()
+            self.drag_event = isevent
             return
         end
 
@@ -279,6 +300,8 @@ function directEventEditing:mousepressed(x, y, button, istouch, presses)
             for index, point in ipairs(bezier_points) do
                 if isMouseOnPoint(point.x, point.y, CONTROL_RADIUS) then
                     self.catch_point = 'control' .. index
+                    self.drag_before = isevent:copy()
+                    self.drag_event = isevent
                     return
                 end
             end

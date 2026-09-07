@@ -215,6 +215,7 @@ meta_settings = {
         window_width = WINDOW.w,        -- 窗口宽度
         window_height = WINDOW.h,       -- 窗口高度
         auto_save = 1,                  -- 自动保存间隔（分钟）
-        wavfrom = 1                     -- 是否显示波形图
+        wavfrom = 1,                    -- 是否显示波形图
+        paste_preview_alpha = 0.75      -- 粘贴预览透明度
     }
 }

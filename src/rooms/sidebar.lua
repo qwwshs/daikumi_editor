@@ -6,6 +6,11 @@ sidebar.incoming = {}             --传入的参数
 
 
 function sidebar:to(ty, ...)      -- 更变房间
+    local g_l = self:getGroup(self.displayed_content)
+    
+    if g_l and type(g_l.leave) == 'function' then
+        g_l:leave()
+    end
     self.incoming = { ... }
     self.displayed_content = ty
     log("Sidebar to " .. ty)
@@ -96,7 +101,7 @@ sidebar:addGroup(require 'src.objects.sidebar.chart_info')
 sidebar:addGroup(require 'src.objects.sidebar.event')
 sidebar:addGroup(require 'src.objects.sidebar.note')
 sidebar:addGroup(require 'src.objects.sidebar.events')
-sidebar:addGroup(require 'src.objects.sidebar.to_takana')    -- 插件化：Takana 转谱器
+sidebar:addGroup(require 'src.objects.sidebar.to_takana')
 sidebar:addGroup(require 'src.objects.sidebar.equalizer')
 
 return sidebar
