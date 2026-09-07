@@ -2,8 +2,152 @@
 local ChartService = require("src.services.chartService")
 local CoordinateService = require("src.services.coordinateService")
 local demoInEdit = object:new('demoInEdit')
+demoInEdit.__index = demoInEdit   -- 原型：标签页实例共享方法与图像
+
+--- 创建编辑窗口实例（多标签页：每个标签页一个）
+-- @tparam table opts 字段：tabbed=是否标签页窗口、tab=对应标签页数据表
+function demoInEdit:new(opts)
+    local inst = setmetatable({}, demoInEdit)
+    for k, v in pairs(opts or {}) do inst[k] = v end
+    return inst
+end
+
+--[[
+    波形图缓存（模块级，多个标签页窗口共享同一份）
+    wav:  采样峰值单元缓存。音频按 WAVE_CELL 个采样切一个单元，按声道记录 min/max，
+          由 wavFill 逐帧增量构建（受时间预算限制），music_data 更换即 wavReset。
+    rows: 行条缓存。编辑窗内每 1px y 一条"峰值带"（min/max），只依赖全局参数
+          （music/nowbeat/scale/judge/offset/bpmCount），不依赖窗口 x，
+          因此多个标签页同帧只重建一次。
+]]
+local WAVE_CELL = 64        -- 峰值单元大小（采样数，约 1.45ms@44.1kHz）
+local WAVE_PREFETCH_S = 4   -- 预取：超过当前视窗需求多少秒的音频（提前构建）
+local WAVE_BUILD_MS = 1.2   -- 已覆盖区域的构建时间预算（毫秒 CPU）
+local WAVE_BUILD_MS_GAP = 8 -- 首帧/跳转后的构建时间预算（毫秒 CPU）
+local WAVE_ALPHA = 0.45     -- 波形透明度（所有 y 位置一致）
+
+local wav = { cells = {}, built = -1, music = nil }
+local rows = { bands = {}, valid = false, pending = 0, needCell = 0 }
+
+-- 更换音频：清空峰值单元缓存，之后从 0 重新增量构建
+local function wavReset()
+    wav.cells = {}
+    wav.built = -1
+    wav.music = music_data
+end
+
+-- 增量构建 [built+1, targetCell] 的峰值单元，超过时间预算即停，下一帧继续
+local function wavFill(targetCell, budgetMs)
+    if targetCell <= wav.built then return end
+    local sr = music_data:getSampleRate()
+    local ch = music_data:getChannelCount()
+    local count = music_data:getSampleCount()
+    local cells = wav.cells
+    local start = os.clock()
+    for c = wav.built + 1, targetCell do
+        local s0 = c * WAVE_CELL
+        local s1 = math.min(s0 + WAVE_CELL - 1, count - 1)
+        local cell = cells[c] or {}
+        cells[c] = cell
+        local mn1, mx1 = 1, -1
+        local mn2, mx2 = 1, -1
+        for s = s0, s1 do
+            local v = music_data:getSample(s, 1)
+            if v < mn1 then mn1 = v end
+            if v > mx1 then mx1 = v end
+            if ch >= 2 then
+                local v2 = music_data:getSample(s, 2)
+                if v2 < mn2 then mn2 = v2 end
+                if v2 > mx2 then mx2 = v2 end
+            end
+        end
+        cell.mn1, cell.mx1 = mn1, mx1
+        cell.mn2, cell.mx2 = mn2, mx2
+        wav.built = c
+        if (os.clock() - start) * 1000 >= budgetMs then break end
+    end
+end
+
+-- 重建行条缓存：逐行计算该 1px 行对应的音频峰值区间；
+-- 行引用的采样单元还没建完则本行留空并累计 pending（之后每帧重建，底部先补全）
+local function rowsRebuild()
+    local sr = music_data:getSampleRate()
+    local ch = music_data:getChannelCount()
+    local count = music_data:getSampleCount()
+    local y0 = math.floor(play.layout.edit.y)
+    local y1 = math.floor(settings.judge_line_y)
+    local n = y1 - y0
+    local bands = rows.bands
+    local pending = 0
+    local needCell = 0
+    for i = 1, n do
+        local band = bands[i] or {}
+        bands[i] = band
+        band.lo, band.hi, band.lo2, band.hi2 = 1, -1, 1, -1 -- 先置空（lo > hi 表示空）
+        local yTop = y0 + i - 1
+        local t1 = ChartService:toTime(CoordinateService:yToBeat(yTop)) - ChartService:getOffset() / 1000
+        local t0 = ChartService:toTime(CoordinateService:yToBeat(yTop + 1)) - ChartService:getOffset() / 1000
+        local s1 = math.floor(t1 * sr)
+        local s0 = math.ceil(t0 * sr)
+        if s1 - s0 < WAVE_CELL then
+            -- 放大视图（每行采样数 < 单元大小）：直接读原始采样
+            local as = math.max(s0, 0)
+            local ae = math.min(s1, count - 1)
+            local lo, hi, lo2, hi2 = 1, -1, 1, -1
+            for s = as, ae do
+                local v = music_data:getSample(s, 1)
+                if v < lo then lo = v end
+                if v > hi then hi = v end
+                if ch >= 2 then
+                    local v2 = music_data:getSample(s, 2)
+                    if v2 < lo2 then lo2 = v2 end
+                    if v2 > hi2 then hi2 = v2 end
+                end
+            end
+            band.lo, band.hi, band.lo2, band.hi2 = lo, hi, lo2, hi2
+        else
+            -- 常规/缩小视图：走采样峰值单元缓存，单元没建完则该行留空
+            local c0 = math.max(0, math.floor(s0 / WAVE_CELL))
+            local c1 = math.min(math.floor(s1 / WAVE_CELL), math.floor((count - 1) / WAVE_CELL))
+            local cells = wav.cells
+            local ok = true
+            local lo, hi, lo2, hi2 = 1, -1, 1, -1
+            for c = c0, c1 do
+                if c > needCell then needCell = c end
+                local cell = cells[c]
+                if cell then
+                    if cell.mn1 < lo then lo = cell.mn1 end
+                    if cell.mx1 > hi then hi = cell.mx1 end
+                    if ch >= 2 and cell.mn2 then
+                        if cell.mn2 < lo2 then lo2 = cell.mn2 end
+                        if cell.mx2 > hi2 then hi2 = cell.mx2 end
+                    end
+                else
+                    ok = false
+                end
+            end
+            if ok and c0 <= c1 then
+                band.lo, band.hi, band.lo2, band.hi2 = lo, hi, lo2, hi2
+            elseif c0 <= c1 then
+                pending = pending + 1
+            end
+        end
+    end
+    rows.pending = pending
+    rows.needCell = needCell
+    rows.valid = true
+    rows.music = music_data
+    rows.nowbeat = beat.nowbeat
+    rows.scale = denom.scale
+    rows.judge = settings.judge_line_y
+    rows.offset = ChartService:getOffset()
+    rows.bpmCount = ChartService:getBpmCount()
+    rows.y0 = y0
+end
+
 
 function demoInEdit:load()
+    if self.layout then return end -- 幂等：默认实例加载后，标签页实例经原型共享图像/布局
     self.ui_note = isImage.note
     self.ui_wipe = isImage.wipe
     self.ui_hold = isImage.hold_head
@@ -16,40 +160,72 @@ function demoInEdit:load()
     self.layout = play.layout.edit
 end
 
+-- 绘制波形图：行条缓存 + 立体声分色（左蓝右橙）+ 亮度分档（顶部暗 → 底部亮）
 function demoInEdit:drawSample(pos, istrack)
-    local one_track_w = self.layout.oneTrackW
-    local interval = self.layout.interval
-    local track_x, track_y, track_w, track_h = self.layout.x, self.layout.y, self.layout.w, self.layout.h
-    local pos = pos or track_x
-    --绘制波形图
-    local sound_data_count = music_data:getSampleCount()
-    local channel_count = music_data:getChannelCount()
-    local sampleRate = music_data:getSampleRate()
-    local time_end = math.ceil(ChartService:toTime(math.min(CoordinateService:yToBeat(0), beat.allbeat)) - ChartService:getOffset() / 1000)
-    local time_now = math.floor(math.max(time.nowtime, 0) - ChartService:getOffset() / 1000)
-    love.graphics.setColor(1, 1, 1, 0.3)
-    local time_step = 0.005
+    if not music_data then return end
+    if wav.music ~= music_data then wavReset() end
+    local layout = self.layout or play.layout.edit
+    local x = pos or self.x or layout.x
+    local y0 = math.floor(play.layout.edit.y)
+    local y1 = math.floor(settings.judge_line_y)
+    local n = y1 - y0
+    if n <= 0 then return end
 
-    for istime = time_now, time_end - time_step, time_step do
-        for i = 1, channel_count do
-            local sample = math.max(math.min(sampleRate * istime, sound_data_count - 1), 0)
-            local w = music_data:getSample(sample, i) / 2 * interval * 3
-            local x = pos + interval * 1.5
-            local y = CoordinateService:toY(ChartService:toBeat(istime + ChartService:getOffset() / 1000))
+    -- 失效检测：全局参数任一变化，或上轮有行未建成（pending > 0）→ 重建
+    if not (rows.valid and rows.pending == 0 and rows.music == music_data and
+        rows.nowbeat == beat.nowbeat and rows.scale == denom.scale and
+        rows.judge == settings.judge_line_y and rows.offset == ChartService:getOffset() and
+        rows.bpmCount == ChartService:getBpmCount() and rows.y0 == y0) then
+        rowsRebuild()
+    end
 
-            local sample_next = math.max(math.min(sampleRate * (istime + time_step), sound_data_count - 1), 0)
-            local w_next = music_data:getSample(sample_next, i) / 2 * interval * 3
-            local x_next = pos + interval * 1.5
-            local y_next = CoordinateService:toY(ChartService:toBeat(istime + time_step + ChartService:getOffset() / 1000))
+    -- 增量构建峰值单元到"视窗需求 + 预取"；需求远超已建（首帧/跳转）用更大的时间预算
+    local sr = music_data:getSampleRate()
+    local prefetchCells = math.floor(WAVE_PREFETCH_S * sr / WAVE_CELL)
+    wavFill(rows.needCell + prefetchCells, (rows.needCell > wav.built) and WAVE_BUILD_MS_GAP or WAVE_BUILD_MS)
 
-            love.graphics.polygon('fill',
-                x, y,
-                x + w, y,
-                x_next + w_next, y_next,
-                x_next, y_next
-            )
+    -- 逐行绘制（行内按峰值幅度向外生长，夹在窗口内）
+    local ch = music_data:getChannelCount()
+    local window_w = layout.w
+    local cx = x + window_w / 2
+    local half = window_w / 2 - 2       -- 单侧幅度上限
+    local bands = rows.bands
+    local cr, cg, cb = 0.42, 0.72, 1     -- 左声道蓝
+    local cr2, cg2, cb2 = 1, 0.6, 0.32   -- 右声道橙
+    if ch < 2 then cr, cg, cb = 0.45, 0.75, 1 end -- 单声道居中蓝
+    for i = 1, n do
+        local band = bands[i]
+        if band and band.lo <= band.hi then
+            local a = WAVE_ALPHA
+            local y = y0 + i - 1
+            local w = math.max(-band.lo, band.hi) * half
+            if w > 0 then
+                if ch >= 2 then
+                    -- 左声道（蓝）向左画、右声道（橙）向右画，中间留 2px 深色缝
+                    local lx = math.max(x + 3, cx - w)
+                    local lw = (cx - 1) - lx
+                    if lw > 0 then
+                        love.graphics.setColor(cr, cg, cb, a)
+                        love.graphics.rectangle("fill", lx, y, lw, 1)
+                    end
+                    local w2 = math.max(-band.lo2, band.hi2) * half
+                    if w2 > 0 then
+                        local rw = math.min(x + window_w - 3, cx + 2 + w2) - (cx + 1)
+                        if rw > 0 then
+                            love.graphics.setColor(cr2, cg2, cb2, a)
+                            love.graphics.rectangle("fill", cx + 1, y, rw, 1)
+                        end
+                    end
+                else
+                    love.graphics.setColor(cr, cg, cb, a)
+                    local lx = math.max(x + 3, cx - w)
+                    local rx = math.min(x + window_w - 3, cx + w)
+                    if rx - lx > 0 then love.graphics.rectangle("fill", lx, y, rx - lx, 1) end
+                end
+            end
         end
     end
+    love.graphics.setColor(1, 1, 1)
 end
 
 local previous_frame_beat = 0           -- 上一帧的节拍
@@ -57,6 +233,45 @@ local previous_frame_starting_point = 1 -- 上一帧的遍历起点（note）
 local previous_frame_starting_point_event = 1 -- 上一帧的event遍历起点
 
 function demoInEdit:draw(pos, istrack)
+    if self.tabbed then
+        -- 标签页窗口：裁剪/遮罩/标题与内容全部由实例自身绘制，tabs 只需定位 x 并调用 draw
+        local ly = tabs.layout
+        local wx = self.x
+        if wx >= play.layout.x + play.layout.w or wx + ly.tabW <= play.layout.x then
+            return -- 完全在 play 区域外（滚动/拖出）则不绘制
+        end
+        local w = math.min(ly.tabW, play.layout.x + play.layout.w - wx)
+        love.graphics.setScissor(wx, ly.region.y, w, ly.region.h)
+        self:drawEditContent(wx, tabs:getTabTrack(self.tab))
+        -- 不可编辑轨道覆盖 0.5 透明黑遮罩
+        for k = 1, 5 do
+            if not self.tab.edit[ly.lane[k]] then
+                love.graphics.setColor(0, 0, 0, 0.5)
+                love.graphics.rectangle('fill', wx + play.layout.edit.interval * (k - 1), ly.region.y,
+                    play.layout.edit.interval, ly.region.h)
+            end
+        end
+        -- 窗口顶部轨道标签（显示该 edit 区域所属轨道）
+        love.graphics.setColor(0, 0, 0, 0.6)
+        love.graphics.rectangle('fill', wx, ly.region.y, w, 20)
+        love.graphics.setColor(1, 1, 1)
+        local str = ''
+        if self.tab.track == 0 then
+            str = '(' .. i18n:get('now_track') .. ')'
+        end
+        love.graphics.printf(tabs:tabTitle(self.tab) .. str, wx + 4, ly.region.y + 3, w - 8, 'left')
+        love.graphics.setScissor()
+        return
+    end
+    -- 默认实例：多标签页时窗口由各标签页实例绘制，自身只在单标签页时绘制
+    if pos == nil and tabs and not tabs:isSingle() then
+        return
+    end
+    self:drawEditContent(pos or play.layout.edit.x, istrack or track.track)
+end
+
+-- 绘制单个 edit 窗口内容：波形/轨道/note/event/信息（不含裁剪与标签页遮罩/标题）
+function demoInEdit:drawEditContent(pos, istrack)
     local one_track_w = self.layout.oneTrackW
     local interval = self.layout.interval
     local track_x, track_y, track_w, track_h = self.layout.x, self.layout.y, self.layout.w, self.layout.h
@@ -65,14 +280,6 @@ function demoInEdit:draw(pos, istrack)
     local all_track = fTrack:track_get_all_track()
     local note_h = settings.note_height --25 * denom.scale
     local _scale_h = 1 / self._height * note_h
-
-    --多标签页时由 tabs 负责每个窗口的渲染，自身只在单标签页时绘制
-    if pos == nil and tabs and not tabs:isSingle() then
-        return
-    end
-
-    local pos = pos or track_x
-    istrack = istrack or track.track
 
     local trackleft = {} --每个轨道的左边距（随窗口位置变化）
     for i = 1, #trackSequence do

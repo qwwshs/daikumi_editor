@@ -401,7 +401,7 @@ function love.run()
             love.graphics.setScissor()
             love.graphics.present()
         end
-        --love.timer.sleep(0.001) --避免100%占用CPU
+        love.timer.sleep(1 / 120) --避免100%占用CPU
     end
 end
 

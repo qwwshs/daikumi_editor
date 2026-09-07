@@ -133,6 +133,133 @@ function ctrl:get_copy()
 end
 
 -- ============================================================
+-- 粘贴内容变换（粘贴与粘贴预览共用）
+-- ============================================================
+
+--- 计算粘贴目标内容：深拷贝剪贴板并应用与 handlePaste 相同的 beat/track 变换
+-- 粘贴预览与真实粘贴共用本函数，保证预览位置与粘贴结果一致
+-- @tparam boolean flip 是否对 event 数值取反（Ctrl+B）
+-- @tparam boolean all 是否包含 event（Ctrl+A+V）
+-- @treturn table items 变换后的内容，含 note/event 与各自目标标签页下标
+function ctrl:getPasteItems(flip, all)
+    local copy_tab2 = deepCopyWithNotes(self.copy_tab)
+    local items = {
+        note = copy_tab2.note,
+        event = copy_tab2.event,
+        tabidx_note = {},   -- 与 note 并行的目标标签页下标（仅跨标签页粘贴时使用）
+        tabidx_event = {},  -- 与 event 并行的目标标签页下标
+    }
+    if #items.note == 0 and #items.event == 0 then return items end
+
+    local to_beat = beat:toNearby(CoordinateService:yToBeat(mouse.y))
+
+    -- 确定基准 beat（取剪贴板中最早的内容）
+    local first_beat = { 0, 0, 4 }
+    if items.note[1] and items.event[1] then
+        if items.note[1]:getBeatValue() <= items.event[1]:getBeatValue() then
+            first_beat = items.note[1]:getBeat()
+        else
+            first_beat = items.event[1]:getBeat()
+        end
+    elseif items.note[1] then
+        first_beat = items.note[1]:getBeat()
+    elseif items.event[1] then
+        first_beat = items.event[1]:getBeat()
+    end
+
+    if items.note[1] and copy_tab2.pos == 'play' and not all then
+        first_beat = items.note[1]:getBeat()
+    end
+
+    -- 跨标签页粘贴：以鼠标所在标签页为锚点，按标签页下标整体平移。
+    -- 鼠标标签页参与了框选 → 内容保持各自原标签页不动；
+    -- 未参与 → 最左框选内容平移到鼠标标签页，其余内容依次顺移到后续标签页；
+    -- 目标标签页不存在的内容不粘贴；鼠标不在任何标签页上时保持各自原标签页
+    local is_tabs_paste = copy_tab2.pos == 'tabs'
+    if is_tabs_paste then
+        local mouse_ti
+        if tabs and not tabs:isSingle() then
+            mouse_ti = tabs:getTabAtMouse()
+        end
+        -- 参照标签页：鼠标标签页参与了框选则以它自身为参照，否则取最左框选标签页
+        local ref_ti
+        if mouse_ti then
+            for i = 1, #items.note do
+                if copy_tab2.note_tabidx[i] == mouse_ti then
+                    ref_ti = mouse_ti
+                    break
+                end
+            end
+            if not ref_ti then
+                for i = 1, #items.event do
+                    if copy_tab2.event_tabidx[i] == mouse_ti then
+                        ref_ti = mouse_ti
+                        break
+                    end
+                end
+            end
+        end
+        if not ref_ti then
+            for i = 1, #items.note do
+                local t = copy_tab2.note_tabidx[i] or 1
+                if not ref_ti or t < ref_ti then ref_ti = t end
+            end
+            for i = 1, #items.event do
+                local t = copy_tab2.event_tabidx[i] or 1
+                if not ref_ti or t < ref_ti then ref_ti = t end
+            end
+        end
+        local shift = ref_ti and mouse_ti and (mouse_ti - ref_ti) or 0
+        -- 每个内容平移到目标标签页（下标 + 位移），目标标签页不存在则不粘贴
+        local function mapTabs(items2, tabidxs)
+            local out, outidxs = {}, {}
+            for i = 1, #items2 do
+                local ti = (tabidxs[i] or 1) + shift
+                local tab = tabs and tabs.list[ti]
+                if tab then
+                    items2[i]:setTrack(tabs:getTabTrack(tab))
+                    out[#out + 1] = items2[i]
+                    outidxs[#outidxs + 1] = ti
+                end
+            end
+            return out, outidxs
+        end
+        items.note, items.tabidx_note = mapTabs(items.note, copy_tab2.note_tabidx)
+        items.event, items.tabidx_event = mapTabs(items.event, copy_tab2.event_tabidx)
+    end
+
+    -- 调整 note 的 beat 和 track
+    for i = 1, #items.note do
+        local n = items.note[i]
+        if copy_tab2.pos ~= 'play' and not is_tabs_paste then
+            n:setTrack(track.track)
+        end
+        n:setBeat(beat:add(beat:sub(n:getBeat(), first_beat), to_beat))
+        if n:isHold() then
+            n:setBeat2(beat:add(beat:sub(n:getBeat2(), first_beat), to_beat))
+        end
+    end
+
+    -- 调整 event 的 beat、track 和翻转
+    for i = 1, #items.event do
+        local isevent = items.event[i]
+        if copy_tab2.pos ~= 'play' and not is_tabs_paste then
+            isevent:setTrack(track.track)
+        end
+        isevent:setBeat(beat:add(beat:sub(isevent:getBeat(), first_beat), to_beat))
+        isevent:setBeat2(beat:add(beat:sub(isevent:getBeat2(), first_beat), to_beat))
+        local need_flip_event = { 'x', 'lpos', 'rpos' }
+        if flip and table.find(need_flip_event, isevent:getType()) then
+            local center = 2 * (ChartService:getPreferenceField('x_offset') + ChartService:getPreferenceField('event_scale') / 2)
+            isevent:setFrom(center - isevent:getFrom())
+            isevent:setTo(center - isevent:getTo())
+        end
+    end
+
+    return items
+end
+
+-- ============================================================
 -- 生命周期方法
 -- ============================================================
 
@@ -260,6 +387,123 @@ function ctrl:draw()
             end
         end
     end
+
+    -- 粘贴预览：复制表有内容时，在粘贴目标位置显示 50% 透明度的 ghost
+    if #self.copy_tab.note > 0 or #self.copy_tab.event > 0 then
+        self:drawPastePreview()
+    end
+end
+
+-- ============================================================
+-- 粘贴预览绘制
+-- ============================================================
+
+--- 绘制粘贴预览：在粘贴目标位置以 50% 透明度显示剪贴板内容的 ghost
+-- 目标位置与 handlePaste 共用 getPasteItems 的变换，跟随鼠标（目标 beat/轨道），
+-- 支持单编辑窗、多标签页窗口与 play 区域来源三种情况
+function ctrl:drawPastePreview()
+    local all = input('pasteAll') or input('flipPasteAll')
+    local flip = input('flipPaste') or input('flipPasteAll')
+    local items = self:getPasteItems(flip, all)
+
+    local note_h = settings.note_height
+    local interval = play.layout.edit.interval
+    local note_w = interval
+    local img_note = isImage.note
+    local img_wipe = isImage.wipe
+    local img_hold = isImage.hold_head
+    local img_body = isImage.hold_body
+    local img_tail = isImage.hold_tail
+    local iw, ih = img_note:getDimensions()
+    local _scale_w = note_w / iw
+    local _scale_h = note_h / ih
+    local is_tabs_paste = self.copy_tab.pos == 'tabs' and tabs and not tabs:isSingle()
+
+    love.graphics.setColor(1, 1, 1, 0.5) -- 预览统一 50% 透明度
+
+    -- note ghost：跟随鼠标 beat，显示在预测的粘贴窗口/轨道上
+    for i = 1, #items.note do
+        local n = items.note[i]
+        local x, w = nil, note_w
+        if self.copy_tab.pos == 'play' and not is_tabs_paste then
+            -- play 区域来源：保持原轨道，映射到 demo 区 x
+            local trackPos = play:get_all_track_pos()[n:getTrack()]
+            if trackPos then
+                x, w = fTrack:to_play_track(trackPos.x, trackPos.w)
+            end
+        elseif is_tabs_paste then
+            -- 跨标签页粘贴：画在目标标签页窗口上
+            local ti = items.tabidx_note[i]
+            if ti and tabs and tabs.list[ti] then x = tabs:windowX(ti) end
+        else
+            -- 单编辑窗：目标轨道为当前轨道
+            x = play.layout.edit.x
+        end
+        if x then
+            local y = CoordinateService:toY(n:getBeat())
+            local y2 = y - note_h
+            if n:isHold() then
+                y2 = CoordinateService:toY(n:getBeat2())
+            end
+            if math.intersect(y, y2, WINDOW.h + note_h, -note_h) then
+                if is_tabs_paste then
+                    local r = tabs.layout.region
+                    love.graphics.setScissor(tabs:windowX(items.tabidx_note[i]), r.y, tabs.layout.tabW, r.h)
+                end
+                local _sw = w / iw -- 按目标宽度等比缩放
+                if n:isNote() then
+                    love.graphics.draw(img_note, x, y - note_h, 0, _sw, _scale_h)
+                elseif n:isWipe() then
+                    love.graphics.draw(img_wipe, x, y - note_h, 0, _sw, _scale_h)
+                else -- hold：头/身/尾
+                    love.graphics.draw(img_hold, x, y - note_h, 0, _sw, _scale_h)
+                    local body_h = y - y2 - note_h * 2
+                    if body_h > 0 then
+                        love.graphics.draw(img_body, x, y2 + note_h, 0, _sw, body_h / ih)
+                    end
+                    love.graphics.draw(img_tail, x, y2, 0, _sw, _scale_h)
+                end
+            end
+        end
+    end
+
+    -- event ghost：仅在 edit 窗口目标显示（play 区域粘贴 event 仅 pasteAll 时发生且 demo 区不渲染 event 详情，跳过）
+    if self.copy_tab.pos ~= 'play' then
+        for i = 1, #items.event do
+            local e = items.event[i]
+            local x
+            if is_tabs_paste then
+                local ti = items.tabidx_event[i]
+                if ti and tabs and tabs.list[ti] then x = tabs:windowX(ti) end
+            else
+                x = play.layout.edit.x
+            end
+            if x then
+                local y = CoordinateService:toY(e:getBeat())
+                local y2 = CoordinateService:toY(e:getBeat2())
+                if math.intersect(y, y2, WINDOW.h + note_h, -note_h) then
+                    if is_tabs_paste then
+                        local r = tabs.layout.region
+                        love.graphics.setScissor(tabs:windowX(items.tabidx_event[i]), r.y, tabs.layout.tabW, r.h)
+                    end
+                    local lx = x + interval * ((trackSequence[e:getType()] or trackSequence.note) - 1)
+                    love.graphics.draw(img_hold, lx, y - note_h, 0, _scale_w, _scale_h)
+                    love.graphics.printf(e:getFrom(), lx, y - note_h, interval, 'center')
+                    local body_h = y - y2 - note_h * 2
+                    if body_h > 0 then
+                        love.graphics.draw(img_body, lx, y2 + note_h, 0, _scale_w, body_h / ih)
+                    end
+                    love.graphics.draw(img_tail, lx, y2, 0, _scale_w, _scale_h)
+                    love.graphics.printf(e:getTo(), lx, y2, interval, 'center')
+                end
+            end
+        end
+    end
+
+    if is_tabs_paste then
+        love.graphics.setScissor()
+    end
+    love.graphics.setColor(1, 1, 1)
 end
 
 -- ============================================================
@@ -584,124 +828,9 @@ end
 local function handlePaste()
     local all = input('pasteAll') or input('flipPasteAll')
     local flip = input('flipPaste') or input('flipPasteAll')
-    local copy_tab2 = deepCopyWithNotes(ctrl.copy_tab)
-
-    -- 找到最小 track 和最小 beat 作为基准
-    local min_track
-    if copy_tab2.note[1] then min_track = copy_tab2.note[1]:getTrack() end
-    if copy_tab2.event[1] then min_track = copy_tab2.event[1]:getTrack() end
-    for i = 1, #copy_tab2.note do
-        if min_track > copy_tab2.note[i]:getTrack() then min_track = copy_tab2.note[i]:getTrack() end
-    end
-    for i = 1, #copy_tab2.event do
-        if min_track > copy_tab2.event[i]:getTrack() then min_track = copy_tab2.event[i]:getTrack() end
-    end
+    local copy_tab2 = ctrl:getPasteItems(flip, all) -- 变换后的粘贴内容（与粘贴预览共用）
 
     sidebar:to("nil")
-    local to_beat = beat:toNearby(CoordinateService:yToBeat(mouse.y))
-
-    -- 确定基准 beat
-    local first_beat = { 0, 0, 4 }
-    if ctrl.copy_tab.note[1] and ctrl.copy_tab.event[1] then
-        if ctrl.copy_tab.note[1]:getBeatValue() <= ctrl.copy_tab.event[1]:getBeatValue() then
-            first_beat = ctrl.copy_tab.note[1]:getBeat()
-        else
-            first_beat = ctrl.copy_tab.event[1]:getBeat()
-        end
-    elseif ctrl.copy_tab.note[1] then
-        first_beat = ctrl.copy_tab.note[1]:getBeat()
-    elseif ctrl.copy_tab.event[1] then
-        first_beat = ctrl.copy_tab.event[1]:getBeat()
-    end
-
-    if ctrl.copy_tab.note[1] and ctrl.copy_tab.pos == 'play' and not all then
-        first_beat = ctrl.copy_tab.note[1]:getBeat()
-    end
-
-    -- 跨标签页粘贴：以鼠标所在标签页为锚点，按标签页下标整体平移。
-    -- 鼠标标签页参与了框选 → 内容保持各自原标签页不动；
-    -- 未参与 → 最左框选内容平移到鼠标标签页，其余内容依次顺移到后续标签页；
-    -- 目标标签页不存在的内容不粘贴；鼠标不在任何标签页上时保持各自原标签页
-    local is_tabs_paste = ctrl.copy_tab.pos == 'tabs'
-    if is_tabs_paste then
-        local mouse_ti
-        if tabs and not tabs:isSingle() then
-            mouse_ti = tabs:getTabAtMouse()
-        end
-        -- 参照标签页：鼠标标签页参与了框选则以它自身为参照，否则取最左框选标签页
-        local ref_ti
-        if mouse_ti then
-            for i = 1, #ctrl.copy_tab.note do
-                if ctrl.copy_tab.note_tabidx[i] == mouse_ti then
-                    ref_ti = mouse_ti
-                    break
-                end
-            end
-            if not ref_ti then
-                for i = 1, #ctrl.copy_tab.event do
-                    if ctrl.copy_tab.event_tabidx[i] == mouse_ti then
-                        ref_ti = mouse_ti
-                        break
-                    end
-                end
-            end
-        end
-        if not ref_ti then
-            for i = 1, #ctrl.copy_tab.note do
-                local t = ctrl.copy_tab.note_tabidx[i] or 1
-                if not ref_ti or t < ref_ti then ref_ti = t end
-            end
-            for i = 1, #ctrl.copy_tab.event do
-                local t = ctrl.copy_tab.event_tabidx[i] or 1
-                if not ref_ti or t < ref_ti then ref_ti = t end
-            end
-        end
-        local shift = ref_ti and mouse_ti and (mouse_ti - ref_ti) or 0
-        -- 每个内容平移到目标标签页（下标 + 位移），目标标签页不存在则不粘贴
-        local function mapTabs(items, tabidxs)
-            local out = {}
-            for i = 1, #items do
-                local ti = (tabidxs[i] or 1) + shift
-                local tab = tabs and tabs.list[ti]
-                if tab then
-                    items[i]:setTrack(tabs:getTabTrack(tab))
-                    out[#out + 1] = items[i]
-                end
-            end
-            return out
-        end
-        copy_tab2.note = mapTabs(copy_tab2.note, ctrl.copy_tab.note_tabidx)
-        copy_tab2.event = mapTabs(copy_tab2.event, ctrl.copy_tab.event_tabidx)
-    end
-
-    -- 调整 note 的 beat 和 track
-    for i = 1, #copy_tab2.note do
-        local n = copy_tab2.note[i]
-        if ctrl.copy_tab.pos ~= 'play' and not is_tabs_paste then
-            n:setTrack(track.track)
-        end
-        n:setBeat(beat:add(beat:sub(n:getBeat(), first_beat), to_beat))
-        if n:isHold() then
-            n:setBeat2(beat:add(beat:sub(n:getBeat2(), first_beat), to_beat))
-        end
-    end
-
-    -- 调整 event 的 beat、track 和翻转
-    for i = 1, #copy_tab2.event do
-        local isevent = copy_tab2.event[i]
-        if ctrl.copy_tab.pos ~= 'play' and not is_tabs_paste then
-            isevent:setTrack(track.track)
-        end
-        isevent:setBeat(beat:add(beat:sub(isevent:getBeat(), first_beat), to_beat))
-        isevent:setBeat2(beat:add(beat:sub(isevent:getBeat2(), first_beat), to_beat))
-        local need_flip_event = {'x', 'lpos', 'rpos'}
-        if flip and table.find(need_flip_event, isevent:getType()) then
-            local center = 2 * (ChartService:getPreferenceField('x_offset') + ChartService:getPreferenceField('event_scale') / 2)
-            isevent:setFrom(center - isevent:getFrom())
-            isevent:setTo(center - isevent:getTo())
-        end
-    end
-
     ChartService:push()
 
     -- 写入谱面

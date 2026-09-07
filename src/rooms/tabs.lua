@@ -8,7 +8,9 @@
     - 标签页窗口位于 editTool 下方（同长度同 x），拖动条窗口位于其下
     - 一个标签页 = 一个 edit 区域（宽度与 edit 区域相同）
     - + 添加标签页、X 关闭标签页、拖动排序（浏览器式）、双击修改标签页代表的轨道
-    - 标签页与其 edit 窗口（轨道）的横坐标时刻保持一致（含拖动、换位与标签条滚动）
+    - 标签页与其 edit 窗口（轨道）的横坐标时刻保持一致（含拖动、换位与标签条滚动）；
+      edit 窗口渲染（裁剪/遮罩/标题/内容）由 demoInEdit 实例 editView 自行完成，
+      tabs 只负责每帧同步窗口左缘并调用 editView:draw()
     - 每个标签页显示其轨道 note/x/w/lpos/rpos 的合并开关（同时控制可编辑与可复制）
     - 标签页本体（背景/标题/关闭按钮/合并开关/轨道号输入框/+按钮）全部由 nuklear 绘制，
       轨道号输入框内嵌在标签页标题行，输入内容清晰可见
@@ -21,6 +23,7 @@
 
 local tabs = group:new('tabs')
 local ChartService = require("src.services.chartService")
+local demoInEdit = require 'src.objects.play.demoInEdit'
 tabs.layout = require 'config.layouts.tab'
 
 local function clamp(v, lo, hi)
@@ -29,13 +32,16 @@ end
 
 --- 新建标签页（默认轨道 0 = 跟随 track.track）
 local function newTab(trackId)
-    return {
+    local tab = {
         track = trackId or 0,
         edit = { note = true, x = true, w = true, lpos = true, rpos = true },  -- 各轨道类型可编辑
         copy = { note = true, x = true, w = true, lpos = true, rpos = true },  -- 各轨道类型可复制
         renaming = false,
         renameBuf = { value = '' },
     }
+    -- edit 窗口实例：窗口渲染（裁剪/遮罩/标题/内容）由实例自行完成
+    tab.editView = demoInEdit:new{ tabbed = true, tab = tab }
+    return tab
 end
 
 tabs.list = {}
@@ -47,7 +53,6 @@ tabs.scrollDrag = false  -- 拖动条拖拽状态
 tabs._scrollGrab = 0     -- 拖动条按下点相对滑块左缘的偏移
 tabs._lastClick = { index = 0, time = 0 } -- 双击检测
 tabs._renameRect = nil   -- 重命名输入框位置（标签页标题行）
-tabs._demoInEdit = nil
 
 function tabs:load()
     -- 从 play.layout / WINDOW 推导布局值，避免魔法硬编码
@@ -78,7 +83,6 @@ function tabs:load()
     self._scrollGrab = 0
     self._lastClick = { index = 0, time = 0 }
     self._renameRect = nil
-    self._demoInEdit = play and play:getObject('demoInEdit')
 end
 
 -- ============================================================
@@ -356,6 +360,7 @@ function tabs:update(dt)
     for i = 1, #self.list do
         local name = 'edit_area' .. i
         local wx = self:windowX(i)
+        self.list[i].editView.x = wx -- 窗口左缘每帧与标签页横坐标保持一致
         if Nui:windowBegin(name, wx, ly.region.y, ly.tabW, ly.region.h, 'border', 'background') then
             Nui:windowEnd()
         end
@@ -501,7 +506,6 @@ function tabs:draw()
 
     -- 多标签页：绘制每个标签页的 edit 区域（拖拽中的最后绘制，保持最上层）
     if not self:isSingle() then
-        local demoInEdit = self._demoInEdit or play:getObject('demoInEdit')
         local order = {}
         for i = 1, #self.list do
             if not (self.drag and i == self.drag.index) then
@@ -510,31 +514,11 @@ function tabs:draw()
         end
         if self.drag then order[#order + 1] = self.drag.index end
         for _, i in ipairs(order) do
-            local tab = self.list[i]
-            local wx = self:windowX(i)
-            if wx < play.layout.x + play.layout.w and wx + ly.tabW > play.layout.x then
-                local w = math.min(ly.tabW, play.layout.x + play.layout.w - wx)
-                love.graphics.setScissor(wx, ly.region.y, w, ly.region.h)
-                demoInEdit:draw(wx, self:getTabTrack(tab))
-                -- 不可编辑轨道覆盖 0.5 透明黑遮罩
-                for k = 1, 5 do
-                    if not tab.edit[ly.lane[k]] then
-                        love.graphics.setColor(0, 0, 0, 0.5)
-                        love.graphics.rectangle('fill', wx + play.layout.edit.interval * (k - 1), ly.region.y,
-                            play.layout.edit.interval, ly.region.h)
-                    end
-                end
-                -- 窗口顶部轨道标签（显示该 edit 区域所属轨道）
-                love.graphics.setColor(0, 0, 0, 0.6)
-                love.graphics.rectangle('fill', wx, ly.region.y, w, 20)
-                love.graphics.setColor(1, 1, 1)
-                local str = ''
-                if tab.track == 0 then
-                    str = '('..i18n:get('now_track')..')'
-                end
-                love.graphics.printf(self:tabTitle(tab)..str, wx + 4, ly.region.y + 3, w - 8, 'left')
-                love.graphics.setScissor()
-            end
+            -- 窗口渲染（裁剪/遮罩/标题/内容）由 editView 实例自行完成；
+            -- 左缘再同步一次：+ 按钮新建标签页发生在 update 同步循环之后，当帧即需绘制
+            local v = self.list[i]
+            v.editView.x = self:windowX(i)
+            v.editView:draw()
         end
     end
 end
