@@ -29,7 +29,7 @@ Dakumi 是一个基于 LOVE2D 11.4 框架开发的 TAKUMI³ 谱面编辑器。�
 ### 技术栈
 - **框架**：LOVE2D 11.4
 - **语言**：Lua
-- **GUI**：Nuklear + Slab
+- **GUI**：Nuklear
 - **音频**：LOVE2D Audio + LuaFFT
 - **数据格式**：JSON + YAML
 
@@ -69,7 +69,6 @@ cd dakumi
 - moonshine：后处理特效库
 - hump：LOVE2D 工具库
 - lovefft：FFT 音频分析库
-- Slab：即时模式 GUI 框架
 
 ### 4. 运行项目
 
@@ -818,7 +817,6 @@ end
 - [LOVE2D 文档](https://love2d.org/wiki)
 - [Lua 5.1 参考手册](https://www.lua.org/manual/5.1/)
 - [Nuklear GUI](https://github.com/keharriso/love-nuklear)
-- [Slab GUI](https://github.com/flamendless/Slab)
 - [Moonshine 后处理](https://github.com/vrld/moonshine)
 
 ---

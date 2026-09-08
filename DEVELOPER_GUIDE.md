@@ -36,7 +36,7 @@
 │    room / beat / table / input / plugin / window │
 ├─────────────────────────────────────────────────┤
 │                 第三方库 (不可修改)                │
-│   Slab / nuklear / moonshine / dkjson / serpent  │
+│   nuklear / moonshine / dkjson / serpent  │
 │   nativefs / lua-yaml / luafft / lovefft / easings │
 └─────────────────────────────────────────────────┘
 ```
@@ -76,7 +76,7 @@ quit              -- 退出
 
 ```
 第1层: 平台/语言内置模块     (utf8, socket, ffi)
-第2层: GUI 框架              (nuklear, Slab)
+第2层: GUI 框架              (nuklear)
 第3层: 序列化/工具库          (serpent, yaml, timer, moonshine, cursor)
 第4层: 核心系统模块           (file, pass, room, window, meta)
 第5层: 业务逻辑模块           (beat, event, note, log, string, table, save)
@@ -87,7 +87,6 @@ quit              -- 退出
 ```
 
 **关键约束**：
-- 第三方库代码不可修改（Slab、nuklear、moonshine、dkjson、serpent、nativefs、lua-yaml、luafft、lovefft、complex、easings）
 - 下层模块不可引用上层模块
 - 同层模块尽量避免相互引用
 
@@ -555,8 +554,7 @@ daikumi editor/
 │   │   ├── pass.lua                -- 空函数占位
 │   │   ├── string.lua              -- 字符串工具
 │   │   ├── math.lua                -- 数学工具
-│   │   ├── bezier.lua              -- 贝塞尔曲线
-│   │   └── Slab/                   -- Slab GUI（第三方，不可修改）
+│   │   └── bezier.lua              -- 贝塞尔曲线
 │   ├── services/                   -- 服务层
 │   │   ├── chartService.lua        -- 谱面数据服务
 │   │   ├── coordinateService.lua   -- 坐标转换服务

@@ -3,7 +3,7 @@
     描述: Event 直观编辑插件，提供可视化的拖拽控制点编辑 event
     作者: qwwshs
     版本: 1.0.0
-    依赖: object, input, messageBox, sidebar, chart, beat, fTrack, fEvent, mouse, transIndex, easings, Slab, i18n
+    依赖: object, input, messageBox, sidebar, chart, beat, fTrack, fEvent, mouse, transIndex, easings, Nui, i18n
 
     功能：
     - 拖拽 event 的头/尾控制点
@@ -24,6 +24,11 @@ directEventEditing.catch_point = nil
 
 --- 控制点半径（用于点击检测）
 local CONTROL_RADIUS = 20
+
+--- 右键菜单尺寸（px，宽度需容纳 i18n 文本，高度容纳全部菜单项）
+local MENU_W = 240
+local MENU_H = 160
+local MENU_ITEM_H = 25
 
 -- ============================================================
 -- 辅助函数
@@ -198,74 +203,90 @@ function directEventEditing:update(dt)
         sidebar:to('event', sidebar.incoming[1])
     end
 
-    -- 右键菜单
-    local original_x, original_y = love.mouse.getPosition()
-    Slab.BeginWindow('Left_Mouse_Context_Menu', {
-        Title = "", X = original_x, Y = original_y, W = 0, H = 0,
-        BgColor = {0, 0, 0, 0}
+    -- 右键菜单（Nuklear 上下文菜单：触发区 = demo 区域，右键任意处弹出，菜单自动出现在鼠标处）
+    -- nk_contextual_begin 要求当前帧必须存在一个「激活中的窗口」作为宿主（ctx->current == ctx->active），
+    -- 而本插件 update 在编辑场景中第一个执行，因此先包一个全透明壳窗口（区域同 demo）提供宿主
+    local demo = play.layout.demo
+    local region = tabs.layout.region
+    Nui:stylePush({
+        ['window'] = {
+            ['background'] = '#00000000',
+            ['fixed background'] = '#00000000',
+            ['border color'] = '#00000000',
+            ['padding'] = { x = 0, y = 0 },
+        },
     })
-    if Slab.BeginContextMenuWindow() then
-        -- 切换过渡类型
-        if Slab.MenuItem(i18n:get('switch trans type')) then
+    local menu_host = Nui:windowBegin('directEventEditing', demo.x, region.y, demo.w, region.h, 'border')
+    Nui:stylePop()
+    if menu_host then
+        -- 保证壳窗口是当前激活窗口（nk_contextual_begin 的 ctx->current == ctx->active 条件）
+        Nui:windowSetFocus('directEventEditing')
+        if Nui:contextualBegin(MENU_W, MENU_H, demo.x, region.y, demo.w, region.h) then
+            -- 必须显式设置行布局：nk_contextual_item_text 依赖 row.columns/row.height 分配空间，
+            -- 未设置时布局 columns=0，所有 item 宽度为 NaN 而完全不可见（菜单只剩黑色背景）
+            Nui:layoutRow('dynamic', MENU_ITEM_H, 1)
+            -- 切换过渡类型
+            if Nui:contextualItem(i18n:get('switch trans type')) then
+                if isevent:getTransType() == 'bezier' then
+                    isevent:setTransType('easings')
+                else
+                    isevent:setTransType('bezier')
+                end
+            end
+
+            -- 切换到下一个曲线类型
+            if Nui:contextualItem(i18n:get('switch the curve to the next type')) then
+                if isevent:getTransType() == 'bezier' then
+                    if fEvent.bezier[transIndex.bezier + 1] then
+                        transIndex.bezier = transIndex.bezier + 1
+                        isevent:setTransData(table.copy(fEvent.bezier[transIndex.bezier]))
+                    end
+                else
+                    if easings[transIndex.easings + 1] then
+                        transIndex.easings = transIndex.easings + 1
+                        isevent:setEasings(transIndex.easings)
+                    end
+                end
+            end
+
+            -- 切换到上一个曲线类型
+            if Nui:contextualItem(i18n:get('switch the curve back to the previous type')) then
+                if isevent:getTransType() == 'bezier' then
+                    if fEvent.bezier[transIndex.bezier - 1] then
+                        transIndex.bezier = transIndex.bezier - 1
+                        isevent:setTransData(table.copy(fEvent.bezier[transIndex.bezier]))
+                    end
+                else
+                    if easings[transIndex.easings - 1] then
+                        transIndex.easings = transIndex.easings - 1
+                        isevent:setEasings(transIndex.easings)
+                    end
+                end
+            end
+
+            -- bezier 控制点操作
             if isevent:getTransType() == 'bezier' then
-                isevent:setTransType('easings')
-            else
-                isevent:setTransType('bezier')
+                if Nui:contextualItem(i18n:get('add control point')) then
+                    local x = (mouse.x - c_x) / (c_x2 - c_x)
+                    local y = (mouse.y - c_y) / (c_y2 - c_y)
+                    local td = isevent:getTransData()
+                    table.insert(td, x)
+                    table.insert(td, y)
+                end
+                if Nui:contextualItem(i18n:get('delete control point')) then
+                    local td = isevent:getTransData()
+                    if #td > 2 then
+                        table.remove(td, #td)
+                        table.remove(td, #td)
+                    end
+                end
             end
-        end
 
-        -- 切换到下一个曲线类型
-        if Slab.MenuItem(i18n:get('switch the curve to the next type')) then
-            if isevent:getTransType() == 'bezier' then
-                if fEvent.bezier[transIndex.bezier + 1] then
-                    transIndex.bezier = transIndex.bezier + 1
-                    isevent:setTransData(table.copy(fEvent.bezier[transIndex.bezier]))
-                end
-            else
-                if easings[transIndex.easings + 1] then
-                    transIndex.easings = transIndex.easings + 1
-                    isevent:setEasings(transIndex.easings)
-                end
-            end
+            Nui:contextualEnd()
+            sidebar:to('event', sidebar.incoming[1])
         end
-
-        -- 切换到上一个曲线类型
-        if Slab.MenuItem(i18n:get('switch the curve back to the previous type')) then
-            if isevent:getTransType() == 'bezier' then
-                if fEvent.bezier[transIndex.bezier - 1] then
-                    transIndex.bezier = transIndex.bezier - 1
-                    isevent:setTransData(table.copy(fEvent.bezier[transIndex.bezier]))
-                end
-            else
-                if easings[transIndex.easings - 1] then
-                    transIndex.easings = transIndex.easings - 1
-                    isevent:setEasings(transIndex.easings)
-                end
-            end
-        end
-
-        -- bezier 控制点操作
-        if isevent:getTransType() == 'bezier' then
-            if Slab.MenuItem(i18n:get('add control point')) then
-                local x = (mouse.x - c_x) / (c_x2 - c_x)
-                local y = (mouse.y - c_y) / (c_y2 - c_y)
-                local td = isevent:getTransData()
-                table.insert(td, x)
-                table.insert(td, y)
-            end
-            if Slab.MenuItem(i18n:get('delete control point')) then
-                local td = isevent:getTransData()
-                if #td > 2 then
-                    table.remove(td, #td)
-                    table.remove(td, #td)
-                end
-            end
-        end
-
-        Slab.EndContextMenu()
-        sidebar:to('event', sidebar.incoming[1])
+        Nui:windowEnd()
     end
-    Slab.EndWindow()
 end
 
 --- 鼠标按下：检测控制点点击

@@ -85,7 +85,6 @@ dakumi需要nuklear的动态运行库，放在dakumi的同级目录之下
 
 - [lovefft](https://github.com/Gennadiyev/lovefft)
 
-- [Slab](https://github.com/flamendless/Slab)
 ## 开源许可
 
 dakumi遵循宽松的MIT协议

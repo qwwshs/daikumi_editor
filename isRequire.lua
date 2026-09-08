@@ -5,7 +5,7 @@
 
     加载顺序说明:
     1. 平台/语言内置模块 (utf8, socket, ffi)
-    2. GUI 框架 (nuklear, Slab)
+    2. GUI 框架 (nuklear)
     3. 序列化/工具库 (serpent, yaml, timer, moonshine, cursor)
     4. 核心系统模块 (file, pass, room, window, meta)
     5. 业务逻辑模块 (beat, event, note, log, string, table, save)
@@ -27,8 +27,6 @@ ffi = require("ffi")          -- LuaJIT FFI，用于调用 C 语言库
 -- 第2层: GUI 框架
 -- ============================================================
 nuklear = require 'nuklear'                        -- Nuklear 即时模式 GUI（通过 DLL 加载）
-Slab = require 'src.utils.Slab.Slab'              -- Slab 即时模式 GUI 框架
-SlabDebug = require 'src.utils.Slab.SlabDebug'    -- Slab 调试工具
 
 -- ============================================================
 -- 第3层: 序列化/工具库（第三方库，不可修改）

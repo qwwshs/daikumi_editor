@@ -190,9 +190,6 @@ room:load("start")
 
 function love.load(arg)
     math.randomseed(os.time()) --随机数种子
-    Slab.Initialize()
-    Slab.PushFont(FONT.normal)
-    --Slab.EnableStats(true)  -- 启用性能统计
 
     --文件夹创建与检查
     nativefs.mount(PATH.base)
@@ -210,7 +207,6 @@ function love.update(dt)
     mouse.cursor = ''
     cursor:pop()
     timer.update(dt)
-    Slab.Update(dt)
     elapsed_time = elapsed_time + dt
 
     if love.window.getFullscreen() and not WINDOW.fullscreen then --全屏
@@ -230,7 +226,6 @@ function love.update(dt)
 
     ui:transOrgin()
     Nui:styleSetFont(FONT.normal)
-    --local statHandle = Slab.BeginStat('scale', 'update') -- 开始统计
     local original_x, original_y = love.mouse.getPosition() --对缩放进行处理
     mouse.x = original_x / WINDOW.scale - (WINDOW.nowW - WINDOW.w * WINDOW.scale) / 2
     mouse.y = original_y / WINDOW.scale - (WINDOW.nowH - WINDOW.h * WINDOW.scale) / 2
@@ -245,7 +240,6 @@ end
 function love.draw()
     room("draw")
     messageBox:draw()
-    Slab.Draw()
     Nui:draw()
 end
 
@@ -377,7 +371,6 @@ function love.run()
         -- Update dt, as we'll be passing it to update
         dt = love.timer.step()
 
-        --        Slab.Update(dt)
         -- Call update and draw
         Nui:frameBegin()
         love.update(dt) -- will pass 0 if love.timer is disabled
