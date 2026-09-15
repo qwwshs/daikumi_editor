@@ -2474,6 +2474,27 @@ func _check_shared_holds_and_slide_feedback() -> void:
 	_expect(reversed_session.states[0] == PlaySession.State.HOLDING and reversed_session.states[1] == PlaySession.State.PENDING, "Hold→Tap：按 Hold 不判它后面的 Tap")
 	reversed_session.update(1.05, {7: {"x": 0.5, "pressed": true}})
 	_expect(reversed_session.states[1] == PlaySession.State.DONE and reversed_session.judgement_counts["just+"] == 2, "Hold→Tap：后面的 Tap 等自己那次按下才判")
+	# 视听反馈跟着判定走：挂起的长条在按下那一刻不亮特效、不出判定文字，
+	# 等它真的判完（别的手指认领、或判漏前归位）才补上。
+	var pair_field := Playfield.new()
+	var pair_session := PlaySession.new(ChartData.new(JSON.stringify(pair)))
+	pair_field.attach_session(pair_session)
+	pair_session.update(1.0, {7: {"x": 0.5, "pressed": true}})
+	_expect(pair_field._hold_hits.size() == 1 and pair_field._hits.is_empty(), "Hold：同刻第二根长条按下时不亮打击特效")
+	_expect(pair_session.deferred_holds.size() == 1 and pair_field._display_grade == "just+", "Hold：那一刻只出了一次判定文字")
+	pair_session.update(1.06, {7: {"x": 0.5, "pressed": false}})
+	_expect(pair_field._hold_hits.size() == 1, "Hold：挂起期间一直不亮特效")
+	pair_session.update(1.12, {7: {"x": 0.5, "pressed": false}})
+	_expect(pair_field._hold_hits.size() == 2 and pair_field._display_grade == "just+", "Hold：判漏前归位时才补上特效与判定文字")
+	pair_field.free()
+	var claim_field := Playfield.new()
+	var claim_session := PlaySession.new(ChartData.new(JSON.stringify(pair)))
+	claim_field.attach_session(claim_session)
+	claim_session.update(1.0, {7: {"x": 0.5, "pressed": true}})
+	_expect(claim_field._hold_hits.size() == 1, "Hold：同刻只亮被认领那一根")
+	claim_session.update(1.05, {8: {"x": 0.5, "pressed": true}})
+	_expect(claim_field._hold_hits.size() == 2, "Hold：别的手指认领时才补上第二根的特效")
+	claim_field.free()
 
 
 ## 谱面时钟：音频时刻是 10 ms 一跳的台阶，时钟（demo.clock_step）必须把它抹平——
