@@ -1,6 +1,8 @@
 extends RefCounted
 ## TAKANA³ V1 / V2 / V3 adapter. Can also be installed through the external-reader UI.
 ## Coordinates: TAKANA stage width = 9, origin at the centre; source times are ms.
+## 难度顺序固定为 normal → ravage；难度编号是下标 + 1，songinfo.yaml 的 difficulties 按这个编号索引。
+const DIFFICULTIES: Array[String] = ["normal", "hard", "master", "insanity", "ravage"]
 var last_error := ""
 
 func can_read(kind: String, path: String, context: DakumiImportContext) -> bool:
@@ -17,17 +19,79 @@ func read_chart(path: String, context: DakumiImportContext) -> Variant:
 	var result := convert_chart(JSON.parse_string(context.read_text(path)))
 	if not result.is_empty():
 		result.info.song_name = path.get_file().get_basename()
-		if context.exists("songinfo.yaml"):
-			var metadata := simple_yaml(context.read_text("songinfo.yaml"))
+		var metadata := read_songinfo(context)
+		if not metadata.is_empty():
 			result.info.song_name = localized(metadata.get("title", result.info.song_name))
 			result.info.artist = localized(metadata.get("composer", ""))
-			var name := path.get_file().to_lower().replace(".editing", "").get_basename()
-			var number := ["normal", "hard", "master", "insanity", "ravage"].find(name) + 1
-			var difficulty: Variant = metadata.get("difficulties", {}).get(str(number), {})
-			if difficulty is Dictionary:
-				result.info.chart_name = name.to_upper() + " " + str(difficulty.get("levelDisplay", ""))
-				result.info.chartor = localized(difficulty.get("charter", ""))
+			var name := difficulty_of(path.get_file())
+			if not name.is_empty():
+				var difficulty: Variant = metadata.get("difficulties", {}).get(str(DIFFICULTIES.find(name) + 1), {})
+				if difficulty is Dictionary:
+					result.info.chart_name = name.to_upper() + " " + str(difficulty.get("levelDisplay", ""))
+					result.info.chartor = localized(difficulty.get("charter", ""))
 	return result if not result.is_empty() else {"reader_error": last_error}
+
+
+## 一个文件夹里的全部难度：选曲界面据此把一首歌展开成多张谱面。
+## 顺序固定为 normal → ravage，等级取 songinfo.yaml。.t3proj 里写的是不带后缀的文件名，
+## 而且大小写不一定和实际文件一致（ravageChartFileName: ravage 对应 RAVAGE.json），所以按小写名查表。
+## 同一难度的正式谱与 .editing.json 都列出，去重留给 ImportAPI（它认得出这是同一张）。
+func scan_bundle(context: DakumiImportContext) -> Dictionary:
+	var config := {}
+	var files: Dictionary = {}
+	var audio := ""
+	var cover := ""
+	for entry in context.list():
+		if entry.is_dir:
+			continue
+		var name := str(entry.name)
+		var extension := name.get_extension().to_lower()
+		if name.to_lower().ends_with(".t3proj"):
+			config = simple_yaml(context.read_text(entry.path))
+		elif extension in ["mp3", "ogg", "wav"]:
+			if audio.is_empty():
+				audio = entry.path
+		elif extension in ["png", "jpg", "jpeg", "webp"]:
+			if cover.is_empty():
+				cover = entry.path
+		if not files.has(name.to_lower()):
+			files[name.to_lower()] = entry.path
+	var metadata := read_songinfo(context, config)
+	var charts: Array[Dictionary] = []
+	for index in DIFFICULTIES.size():
+		# 没有 .t3proj 时按难度名直接找（normal.json …），这样也能按难度顺序列出。
+		var stem := str(config.get(DIFFICULTIES[index] + "ChartFileName", "")).strip_edges()
+		if stem.is_empty():
+			stem = DIFFICULTIES[index]
+		var path := str(files.get((stem + ".json").to_lower(), ""))
+		if path.is_empty():
+			path = str(files.get((stem + ".editing.json").to_lower(), ""))
+		if path.is_empty():
+			continue
+		var difficulty: Variant = metadata.get("difficulties", {}).get(str(index + 1), {})
+		charts.append({"chart": path, "label": DIFFICULTIES[index].to_upper(),
+			"detail": str(difficulty.get("levelDisplay", "")) if difficulty is Dictionary else ""})
+	for pair in [["musicFileName", "audio"], ["coverFileName", "background"]]:
+		var name := str(config.get(pair[0], "")).strip_edges()
+		if not name.is_empty() and context.exists(name):
+			if pair[1] == "audio": audio = context.resolve(name)
+			else: cover = context.resolve(name)
+	return {"charts": charts, "audio": audio, "background": cover} if not charts.is_empty() else {}
+
+
+## 谱面文件名 → 难度名（小写）；不是五个难度之一时返回空串。
+static func difficulty_of(filename: String) -> String:
+	var name := filename.strip_edges().to_lower().replace(".editing", "").get_basename()
+	return name if name in DIFFICULTIES else ""
+
+
+## 文件夹的乐曲元数据：优先 .t3proj 指名的文件，其次是 songinfo.yaml；没有就返回空字典。
+func read_songinfo(context: DakumiImportContext, config: Dictionary = {}) -> Dictionary:
+	var name := str(config.get("songInfoFileName", "")).strip_edges()
+	if name.is_empty() or not context.exists(name):
+		name = "songinfo.yaml"
+	return simple_yaml(context.read_text(name)) if context.exists(name) else {}
+
 
 func resolve_bundle(context: DakumiImportContext) -> Dictionary:
 	var chart := ""

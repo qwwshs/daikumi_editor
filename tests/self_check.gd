@@ -68,6 +68,23 @@ const FIXTURE_ART := Color(0.10, 0.40, 0.80, 1.0)
 const FIXTURE_SONG := "user://chart/__self_check_a_song__"
 const FIXTURE_FILLER := "user://chart/__self_check_b_filler_%02d__"
 const FIXTURE_PIXELS := "user://chart/__self_check_pixels__"
+## 一目录多谱面的夹具：同一个文件夹里放 chart.json（默认）与 extra.json（第二张谱面）。
+## 两张谱面的音符数不同，界面上选中哪一张可以直接从加载结果认出来。
+const MULTI_SONG := "user://chart/__self_check_multi__"
+const MULTI_CHART := """
+{
+  "version": 1, "offset": 0,
+  "bpm_list": [{"beat": [0,0,1], "bpm": 150}],
+  "note": [
+    {"type": "note", "beat": [1,0,1], "track": 1},
+    {"type": "note", "beat": [2,0,1], "track": 1}
+  ],
+  "event": [],
+  "track": {"1": {}},
+  "preference": {"x_offset": 0, "event_scale": 100},
+  "info": {"song_name": "自检多谱面", "chart_name": "Insane", "artist": "自检曲师", "chartor": "自检谱师", "level": "15"}
+}
+"""
 ## 自检期间成绩册写到这个临时文件：玩家真实的 user://scores.cfg 全程不动。
 const SCORES_TEMP := "user://__self_check_scores__.cfg"
 ## 选曲 / 结算界面共用的主题构件：像素断言要拿它的取色当期望值。
@@ -100,6 +117,7 @@ func _ready() -> void:
 	_check_storage()
 	_check_import_roundtrip()
 	_check_takana_import()
+	_check_takana_multi()
 	_check_offset()
 	_check_song_offset()
 	_check_max_fps()
@@ -110,6 +128,7 @@ func _ready() -> void:
 	await _check_note_overflow()
 	await _check_hold_slices_and_lane_layers()
 	await _check_scenes()
+	await _check_multi_charts()
 	await _check_result_scene()
 	await _check_ui_pixels()
 	# 还原磁盘设置与内存状态，避免自检影响真实游玩。
@@ -980,6 +999,32 @@ musicFileName: tone.wav
 coverFileName: bg.png
 """
 
+## 多难度的 TAKANA 曲目信息：等级按难度编号（1=normal … 5=ravage）对号。
+const TAKANA_MULTI_SONGINFO := """
+title:
+  zh-Hans: 自检 TAKANA 多难度
+composer: 自检曲师
+difficulties:
+  "1":
+    levelDisplay: "5"
+  "2":
+    levelDisplay: "9"
+  "3":
+    levelDisplay: "12"
+"""
+
+## 多难度的曲目工程文件：难度名 → 谱面文件名（不带后缀），大小写与文件名不一致也要认；
+## 最后两个难度指了名却没有文件，扫描时应该跳过它们。
+const TAKANA_MULTI_PROJECT := """
+musicFileName: tone.wav
+coverFileName: bg.png
+normalChartFileName: normal
+hardChartFileName: hard
+masterChartFileName: MASTER
+insanityChartFileName: insanity
+ravageChartFileName: ravage
+"""
+
 ## TAKANA 谱面走玩家真实点击导入的那条链路：文件夹导入 → 读取器找谱面 → 进游玩。
 func _check_takana_import() -> void:
 	var source := "user://__self_check_takana__"
@@ -1018,6 +1063,79 @@ func _check_takana_import() -> void:
 			_expect(session.states[0] == PlaySession.State.DONE and session.last_grade == "just+", "TAKANA 导入：轨道落在 TAKANA 舞台坐标换算出的位置")
 		_remove_tree(folder)
 	_remove_tree(source)
+
+
+## 一个 TAKANA 文件夹里有多个难度：按 normal → ravage 的顺序列全，缺文件的难度跳过，
+## 编辑中的同名谱面与正式谱算同一张，工程文件里的大小写与文件名不一致也要认。
+func _check_takana_multi() -> void:
+	var source := "user://__self_check_takana_multi__"
+	_remove_tree(source)
+	DirAccess.make_dir_recursive_absolute(source)
+	# 音符数各不相同：加载完看音符数就知道读的是哪一张（master.editing.json 多一个，用来验证没被选中）。
+	Storage.write_bytes(source.path_join("normal.json"), _takana_chart(1).to_utf8_buffer())
+	Storage.write_bytes(source.path_join("hard.json"), _takana_chart(3).to_utf8_buffer())
+	Storage.write_bytes(source.path_join("master.json"), _takana_chart(5).to_utf8_buffer())
+	Storage.write_bytes(source.path_join("master.editing.json"), _takana_chart(7).to_utf8_buffer())
+	Storage.write_bytes(source.path_join("songinfo.yaml"), TAKANA_MULTI_SONGINFO.to_utf8_buffer())
+	Storage.write_bytes(source.path_join("proj.t3proj"), TAKANA_MULTI_PROJECT.to_utf8_buffer())
+	Storage.write_bytes(source.path_join("tone.wav"), _make_wav())
+	var image := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	image.fill(FIXTURE_ART)
+	Storage.write_bytes(source.path_join("bg.png"), image.save_png_to_buffer())
+	var folder := ImportAPI.import_files("", "", "", source)
+	_expect(not folder.is_empty(), "TAKANA 多谱面：整文件夹导入成功（%s）" % ImportAPI.last_error)
+	var charts := ImportAPI.list_charts(folder)
+	_expect(charts.size() == 3, "TAKANA 多谱面：按难度列出全部谱面（实际 %d 张）" % charts.size())
+	if charts.size() == 3:
+		var names: Array[String] = []
+		for chart in charts:
+			names.append(Storage.display_name(str(chart.chart)))
+		_expect(", ".join(names) == "normal.json, hard.json, master.json",
+			"TAKANA 多谱面：难度顺序 normal → ravage，指了名却没有文件的难度跳过（%s）" % ", ".join(names))
+		_expect(str(charts[0].label) == "NORMAL" and str(charts[1].label) == "HARD" and str(charts[2].label) == "MASTER",
+			"TAKANA 多谱面：标签就是难度名（%s）" % _chart_labels(charts))
+		_expect(str(charts[0].detail) == "5" and str(charts[1].detail) == "9" and str(charts[2].detail) == "12",
+			"TAKANA 多谱面：等级取自 songinfo.yaml（%s）" % _chart_labels(charts))
+		_expect(str(charts[2].chart).ends_with("master.json"),
+			"TAKANA 多谱面：编辑中的同名谱面不算另一张，正式谱优先（%s）" % str(charts[2].chart))
+		_expect(ChartLoader.load_from_folder(folder, str(charts[1].chart)), "TAKANA 多谱面：可以按路径加载指定难度（%s）" % ChartLoader.last_error)
+		_expect(str(ChartLoader.chart_data.info.chart_name).begins_with("HARD") and ChartLoader.chart_data.note.size() == 3,
+			"TAKANA 多谱面：加载的是 HARD 那张（%s / %d 个音符）" % [str(ChartLoader.chart_data.info.chart_name), ChartLoader.chart_data.note.size()])
+		_expect(ChartLoader.score_key() == Setting.song_key(folder) + "#hard", "TAKANA 多谱面：成绩按难度分记（%s）" % ChartLoader.score_key())
+		_expect(ChartLoader.load_from_folder(folder) and ChartLoader.chart_data.note.size() == 1,
+			"TAKANA 多谱面：不给谱面路径时读第一张（NORMAL）")
+	_remove_tree(folder)
+	_remove_tree(source)
+
+
+## 造一张 TAKANA 谱面：一条轨道上放 hits 个单点音符，音符数就是它的身份。
+func _takana_chart(hits: int) -> String:
+	var notes: Array[String] = []
+	for index in hits:
+		notes.append("{\"id\": %d, \"model\": {\"type\": \"hit\", \"timeJudge\": %d}}" % [100 + index, 1000 + 1000 * index])
+	return """
+{
+  "version": 3,
+  "properties": {"offset": {"value": 0, "type": "offset"}},
+  "components": [
+    {"id": 0, "model": {"type": "line"}, "children": [
+      {"id": 7, "name": "lane",
+       "model": {"type": "track", "timeStart": 0, "timeEnd": 9000,
+         "movement": {"type": "trackDirectMovement",
+           "position": {"type": "position", "list": {"0": "v1e_(0, u)"}},
+           "width": {"type": "position", "list": {"0": "v1e_(4.5, u)"}}}},
+       "children": [%s]}]}
+  ]
+}
+""" % ", ".join(notes)
+
+
+## 扫描结果里每条谱面的「难度 等级」，拼成一行给断言当失败信息。
+func _chart_labels(charts: Array[Dictionary]) -> String:
+	var labels: Array[String] = []
+	for chart in charts:
+		labels.append(("%s %s" % [str(chart.label), str(chart.detail)]).strip_edges())
+	return ", ".join(labels)
 
 
 # ---------------------------------------------------------------- 绘制探针
@@ -1865,10 +1983,15 @@ func _check_scenes() -> void:
 		_check_chart_clock(demo)
 		_expect(is_instance_valid(demo.get("_exit_button")) and is_instance_valid(demo.get("_restart_button")), "场景：退出与重开按钮已创建")
 		# 一局结束（finish_run）要写快照并记成绩；直接调用免得切场景。
+		# 成绩键从 ChartLoader 的选中项算出来，所以这里连谱面列表一起摆成“这一首只有一张谱面”。
 		var run_folder := "user://chart/自检游玩记录"
 		var original_folder := ChartLoader.selected_folder
+		var original_chart := ChartLoader.selected_chart
+		var original_charts := ChartLoader.charts
 		var original_result: Dictionary = ChartLoader.last_result
 		ChartLoader.selected_folder = run_folder
+		ChartLoader.selected_chart = ""
+		ChartLoader.charts = [] as Array[Dictionary]
 		session.score = 968420.0
 		session.max_combo = 328
 		session.judgement_counts = {"just+": 300, "just": 10, "good": 3, "ok": 1, "miss": 2}
@@ -1882,6 +2005,8 @@ func _check_scenes() -> void:
 		_expect(not bool(ChartLoader.last_result.get("is_best", false)) and Scores.plays(run_folder) == 2,
 			"场景：同样分数再来一局不算新纪录，但计一次游玩")
 		ChartLoader.selected_folder = original_folder
+		ChartLoader.selected_chart = original_chart
+		ChartLoader.charts = original_charts
 		ChartLoader.last_result = original_result
 	demo.queue_free()
 	await get_tree().process_frame
@@ -1947,14 +2072,24 @@ func _check_scenes() -> void:
 		await get_tree().process_frame
 		_expect(bar.value == 0.0, "选曲：反向拖动回到顶部且不越界（value = %.0f）" % bar.value)
 		# 先点一个空文件夹（读取必然失败），再点回夹具：这样“轻点”才是唯一让状态变化的原因。
+		# 展开会把谱面行插进列表，ItemList 的行号不再等于 _paths 的下标，所以每次现查行号。
 		var play: Button = select.get("_play")
-		_tap_item(picker, 1)
+		var empty_row := _song_row(select, FIXTURE_FILLER % 1)
+		_tap_item(picker, empty_row)
 		await get_tree().create_timer(0.25).timeout
-		_expect(picker.get_selected_items() == PackedInt32Array([1]), "选曲：轻点可以选中条目（选中 %s）" % str(picker.get_selected_items()))
+		_expect(picker.get_selected_items() == PackedInt32Array([_song_row(select, FIXTURE_FILLER % 1)]),
+			"选曲：轻点可以选中条目（选中 %s）" % str(picker.get_selected_items()))
 		_expect(play.disabled, "选曲：读取失败的谱面不能开始游玩")
+		# 轻点夹具那一首：这一首展开出它的谱面行，选中的是展开出来的第一张谱面。
+		row = _song_row(select, FIXTURE_SONG)
 		_tap_item(picker, row)
 		await get_tree().create_timer(0.25).timeout
-		_expect(picker.get_selected_items() == PackedInt32Array([row]), "选曲：轻点夹具行被选中（选中 %s）" % str(picker.get_selected_items()))
+		row = _song_row(select, FIXTURE_SONG)
+		_expect(picker.get_item_count() == 15, "选曲：轻点歌曲行展开出全部谱面（实际 %d 项）" % picker.get_item_count())
+		_expect(picker.get_selected_items() == PackedInt32Array([row + 1]),
+			"选曲：展开后选中它的第一张谱面（选中 %s）" % str(picker.get_selected_items()))
+		_expect(picker.get_item_text(row + 1).contains("●"),
+			"选曲：展开的谱面行标出当前选中的那张（%s）" % picker.get_item_text(row + 1))
 		_expect((select.get("_title") as Label).text == "自检曲目", "选曲：读取谱面后显示曲名（实际 %s）" % (select.get("_title") as Label).text)
 		_expect((select.get("_difficulty") as Label).text == "Master · 12", "选曲：显示难度与等级（实际 %s）" % (select.get("_difficulty") as Label).text)
 		_expect((select.get("_credits") as Label).text.contains("自检曲师"), "选曲：显示曲师（实际 %s）" % (select.get("_credits") as Label).text)
@@ -1978,11 +2113,11 @@ func _check_scenes() -> void:
 			_expect(song_readout.text.begins_with(UI.offset_breakdown(220.0, Setting.offset, Setting.chart_offset, ChartLoader.chart_data.offset)),
 				"选曲：读数把这首的单曲延迟一起算进去（%s）" % song_readout.text)
 			# 换一首歌：显示的是那一首的数值（0），夹具那首不受影响。
-			_tap_item(picker, 1)
+			_tap_item(picker, _song_row(select, FIXTURE_FILLER % 1))
 			await get_tree().create_timer(0.25).timeout
 			_expect_close(song_box.value, 0.0, "选曲：换歌显示那一首各自的单曲延迟")
 			_expect_close(Setting.song_offset_of(FIXTURE_SONG), 220.0, "选曲：换歌不会改到别的歌的数值")
-			_tap_item(picker, row)
+			_tap_item(picker, _song_row(select, FIXTURE_SONG))
 			await get_tree().create_timer(0.25).timeout
 			_expect_close(song_box.value, 220.0, "选曲：切回夹具显示回它自己的 220 ms")
 			# ↺ 归零：键被删掉，读数回到 0。
@@ -2009,7 +2144,7 @@ func _check_scenes() -> void:
 			_expect(false, "选曲：最佳成绩面板可以定位")
 		else:
 			# 先切回夹具：上面那段改过选中项。
-			_tap_item(picker, row)
+			_tap_item(picker, _song_row(select, FIXTURE_SONG))
 			await get_tree().create_timer(0.25).timeout
 			_expect(score_label.text == "-------" and score_summary.text.contains("还没有成绩"),
 				"选曲：没打过的歌显示占位符（%s / %s）" % [score_label.text, score_summary.text])
@@ -2030,10 +2165,10 @@ func _check_scenes() -> void:
 			_expect((_find_tag(select, "song:score_hint", "Label") as Label).text.is_empty(),
 				"选曲：当前模式下的成绩不再多嘴提示")
 			# 换歌：那一首没有成绩，面板回到占位符；切回来成绩还在。
-			_tap_item(picker, 1)
+			_tap_item(picker, _song_row(select, FIXTURE_FILLER % 1))
 			await get_tree().create_timer(0.25).timeout
 			_expect(score_label.text == "-------", "选曲：换到没打过的歌显示没有成绩")
-			_tap_item(picker, row)
+			_tap_item(picker, _song_row(select, FIXTURE_SONG))
 			await get_tree().create_timer(0.25).timeout
 			_expect(score_label.text == "0968420", "选曲：切回夹具显示它自己的成绩")
 			# 位置：成绩栏在歌曲信息右侧（与曲名同一行、不压住它），而不是另起一行。
@@ -2065,6 +2200,167 @@ func _check_scenes() -> void:
 	for index in 13:
 		_remove_tree(FIXTURE_FILLER % index)
 	ChartLoader.selected_folder = ""
+
+
+# ---------------------------------------------------------------- 一目录多谱面
+
+## 一个谱面文件夹里有不止一张谱面：枚举、指定加载、成绩分记、界面展开、
+## 删除谱面 / 删除整首歌（连带二次确认与安全边界）整条链路。
+func _check_multi_charts() -> void:
+	_write_song_fixture(MULTI_SONG, SONG_CHART, FIXTURE_ART)
+	Storage.write_bytes(MULTI_SONG.path_join("extra.json"), MULTI_CHART.to_utf8_buffer())
+	var base := Setting.song_key(MULTI_SONG)
+	var charts := ImportAPI.list_charts(MULTI_SONG)
+	_expect(charts.size() == 2, "多谱面：一个文件夹里读出两张谱面（实际 %d 张）" % charts.size())
+	if charts.size() != 2:
+		_remove_tree(MULTI_SONG)
+		_expect(false, "多谱面：夹具没读出来，后面几项跳过")
+		return
+	_expect(str(charts[0].chart).ends_with("chart.json"), "多谱面：chart.json 是默认的那张，排在最前（%s）" % Storage.display_name(str(charts[0].chart)))
+	_expect(str(charts[1].chart).ends_with("extra.json"), "多谱面：同目录里的其它谱面跟在后面（%s）" % Storage.display_name(str(charts[1].chart)))
+	_expect(str(charts[1].label) == "Insane" and str(charts[1].detail) == "15",
+		"多谱面：标签取谱面自报的难度与等级（%s %s）" % [str(charts[1].label), str(charts[1].detail)])
+	# 加载指定的那一张：读进来的确实是 extra.json（音符数 2，与默认谱面的 1 不同）。
+	_expect(ChartLoader.load_from_folder(MULTI_SONG, str(charts[1].chart)), "多谱面：可以按路径加载指定谱面（%s）" % ChartLoader.last_error)
+	_expect(ChartLoader.selected_chart == str(charts[1].chart) and ChartLoader.chart_data.note.size() == 2,
+		"多谱面：加载的是指定的那张，不是默认谱面")
+	_expect(ChartLoader.load_from_folder(MULTI_SONG), "多谱面：不给谱面路径时读默认谱面")
+	_expect(ChartLoader.selected_chart == str(charts[0].chart) and ChartLoader.chart_data.note.size() == 1,
+		"多谱面：默认就是第一张（%s）" % Storage.display_name(ChartLoader.selected_chart))
+	_expect(ChartLoader.score_key() == base + "#chart", "多谱面：成绩键带上谱面（%s）" % ChartLoader.score_key())
+	# 成绩按谱面分记：两张谱面各记各的，存盘读回也还在。
+	Scores.record(MULTI_SONG, {"score": 700000, "counts": {"just+": 10}}, str(charts[0].chart), 2)
+	Scores.record(MULTI_SONG, {"score": 300000, "counts": {"miss": 4}}, str(charts[1].chart), 2)
+	_expect(int(Scores.best(MULTI_SONG, str(charts[0].chart), 2).get("score", 0)) == 700000
+		and int(Scores.best(MULTI_SONG, str(charts[1].chart), 2).get("score", 0)) == 300000,
+		"多谱面：同一首歌的两张谱面各记各的成绩")
+	_expect(Scores.best(MULTI_SONG).is_empty(), "多谱面：没指定谱面时不算整首歌的成绩")
+	Scores.save_scores()
+	Scores.scores.clear()
+	Scores.load_scores()
+	_expect(int(Scores.best(MULTI_SONG, str(charts[1].chart), 2).get("counts", {}).get("miss", 0)) == 4,
+		"多谱面：按谱面分记的成绩存盘后读得回来")
+	# 删掉一张谱面的成绩：另一张不受影响，文件夹仍然按谱面分记（不回落到整首歌的键）。
+	_expect(Scores.forget_chart(MULTI_SONG, str(charts[1].chart)), "多谱面：删除谱面时能清掉它的成绩")
+	_expect(Scores.best(MULTI_SONG, str(charts[1].chart), 2).is_empty()
+		and int(Scores.best(MULTI_SONG, str(charts[0].chart), 1).get("score", 0)) == 700000,
+		"多谱面：剩下那张谱面的成绩还在")
+	_expect(Scores.key_of(MULTI_SONG, str(charts[0].chart), 1) == base + "#chart",
+		"多谱面：成绩册里还有按谱面分记的键，文件夹就不回落到整首歌的键")
+	# 删除的安全边界：库根、库外路径、带 .. 的路径一律拒绝。
+	_expect(not Storage.delete_tree("res://") and not Storage.delete_tree("") and not Storage.delete_tree("user://chart")
+		and not Storage.delete_file("user://chart/../scores.cfg") and not Storage.delete_file("res://project.godot"),
+		"删除：只删谱面库里的内容（库根 / 库外 / 带 .. 的路径都拒绝）")
+	# 界面：歌曲行展开出全部谱面，谱面行可以单独选中，删谱面 / 删整首歌都要再确认一次。
+	Scores.record(MULTI_SONG, {"score": 300000, "counts": {"miss": 4}}, str(charts[1].chart), 2)
+	# 先当作没选中任何歌：列表一开始是收起的，展开要由轻点触发。
+	ChartLoader.selected_folder = ""
+	ChartLoader.selected_chart = ""
+	var start_scene: PackedScene = load("res://gd/room/startroom.tscn")
+	var host := Control.new()
+	host.size = Vector2(900, 520)
+	add_child(host)
+	var select := start_scene.instantiate()
+	host.add_child(select)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var picker: ItemList = select.find_child("ChartList", true, false)
+	if picker == null:
+		_expect(false, "多谱面：选曲界面的谱面库可以定位")
+		host.queue_free()
+		_remove_tree(MULTI_SONG)
+		return
+	(select.get("_search") as LineEdit).text = "__self_check_multi"
+	select.call("_filter")
+	await get_tree().process_frame
+	_expect(picker.get_item_count() == 1, "多谱面：没展开时列表里只有歌曲行（实际 %d 项）" % picker.get_item_count())
+	_tap_item(picker, 0)
+	await get_tree().create_timer(0.25).timeout
+	var song_row := _song_row(select, MULTI_SONG)
+	_expect(picker.get_item_count() == 3, "多谱面：轻点歌曲行展开出它的全部谱面（实际 %d 项）" % picker.get_item_count())
+	_expect(picker.get_item_text(song_row + 1).contains("●") and picker.get_item_text(song_row + 2).contains("○"),
+		"多谱面：展开的谱面行标出当前选中的那张（%s / %s）" % [picker.get_item_text(song_row + 1), picker.get_item_text(song_row + 2)])
+	_expect(picker.get_item_text(song_row + 2).contains("Insane") and picker.get_item_text(song_row + 2).contains("15"),
+		"多谱面：谱面行写出难度与等级（%s）" % picker.get_item_text(song_row + 2))
+	# 选中第二张：加载的是它，标记跟着换，可以开始游玩。
+	_tap_item(picker, song_row + 2)
+	await get_tree().create_timer(0.25).timeout
+	_expect(ChartLoader.selected_chart == str(charts[1].chart), "多谱面：轻点谱面行选中那一张（%s）" % Storage.display_name(ChartLoader.selected_chart))
+	_expect(ChartLoader.chart_data.note.size() == 2, "多谱面：选中的谱面真的被读进来了（%d 个音符）" % ChartLoader.chart_data.note.size())
+	_expect(picker.get_item_text(song_row + 1).contains("○") and picker.get_item_text(song_row + 2).contains("●"),
+		"多谱面：选中标记跟着换（%s / %s）" % [picker.get_item_text(song_row + 1), picker.get_item_text(song_row + 2)])
+	var play: Button = select.get("_play")
+	_expect(not play.disabled, "多谱面：展开出来的谱面可以开始游玩")
+	# 管理菜单：两条删除都在里面。
+	select.call("_open_manage")
+	await get_tree().process_frame
+	var menu := select.find_child("LibraryMenu", true, false) as PopupMenu
+	_expect(menu != null and menu.item_count == 2 and menu.get_item_text(0).contains("删除谱面") and menu.get_item_text(1).contains("删除整首歌"),
+		"删除：管理菜单提供删除谱面与删除整首歌两条")
+	if menu != null:
+		menu.queue_free()
+	# 删除谱面：先取消（什么都不动），再确认（只删这一张，另一张与其他素材都留着）。
+	select.call("_ask_delete_chart", MULTI_SONG, charts[1])
+	await get_tree().process_frame
+	var dialog := select.find_child("DeleteConfirm", true, false) as ConfirmationDialog
+	_expect(dialog != null, "删除：删谱面前弹出二次确认框")
+	if dialog != null:
+		_expect(dialog.ok_button_text == "删除" and dialog.cancel_button_text == "取消",
+			"删除：确认框的按钮是「删除 / 取消」（%s / %s）" % [dialog.ok_button_text, dialog.cancel_button_text])
+		_expect(dialog.dialog_text.contains("Insane") and dialog.dialog_text.contains("__self_check_multi__"),
+			"删除：确认框说清删的是哪首歌的哪张谱面")
+		dialog.get_cancel_button().emit_signal("pressed")
+	await get_tree().process_frame
+	_expect(FileAccess.file_exists(MULTI_SONG.path_join("extra.json")), "删除：点取消什么都不删")
+	select.call("_ask_delete_chart", MULTI_SONG, charts[1])
+	await get_tree().process_frame
+	dialog = select.find_child("DeleteConfirm", true, false) as ConfirmationDialog
+	if dialog != null:
+		dialog.get_ok_button().emit_signal("pressed")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_expect(not FileAccess.file_exists(MULTI_SONG.path_join("extra.json")), "删除：确认后这张谱面的文件没了")
+	_expect(FileAccess.file_exists(MULTI_SONG.path_join("chart.json")) and FileAccess.file_exists(MULTI_SONG.path_join("tone.wav")),
+		"删除：同一首歌的另一张谱面与音频都留着")
+	_expect(ImportAPI.list_charts(MULTI_SONG).size() == 1, "删除：文件夹里只剩另一张谱面（实际 %d 张）" % ImportAPI.list_charts(MULTI_SONG).size())
+	_expect(picker.get_item_count() == 2, "删除：列表跟着刷新成歌曲行 + 一张谱面（实际 %d 项）" % picker.get_item_count())
+	_expect(Scores.best(MULTI_SONG, str(charts[1].chart), 2).is_empty(), "删除：被删谱面的成绩一起清掉")
+	_expect(int(Scores.best(MULTI_SONG, str(charts[0].chart), 1).get("score", 0)) == 700000, "删除：另一张谱面的成绩留着")
+	# 只剩一张谱面时删谱面：确认框要提醒整首歌都没了。
+	select.call("_ask_delete_chart", MULTI_SONG, charts[0])
+	await get_tree().process_frame
+	dialog = select.find_child("DeleteConfirm", true, false) as ConfirmationDialog
+	_expect(dialog != null and dialog.dialog_text.contains("只剩这一张谱面"), "删除：最后一张谱面的确认框提醒整首歌都会没")
+	if dialog != null:
+		dialog.get_cancel_button().emit_signal("pressed")
+	await get_tree().process_frame
+	# 删除整首歌：文件夹（含音频、封面）、成绩与单曲延迟一起清掉。
+	Setting.set_song_offset(MULTI_SONG, 180.0)
+	Scores.record(MULTI_SONG, {"score": 500000}, str(charts[0].chart), 2)
+	select.call("_ask_delete_song", MULTI_SONG)
+	await get_tree().process_frame
+	dialog = select.find_child("DeleteConfirm", true, false) as ConfirmationDialog
+	_expect(dialog != null and dialog.dialog_text.contains("__self_check_multi__"), "删除：删整首歌也要二次确认")
+	if dialog != null:
+		dialog.get_ok_button().emit_signal("pressed")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_expect(not DirAccess.dir_exists_absolute(MULTI_SONG), "删除：整首歌的文件夹被整个删掉")
+	_expect(not FileAccess.file_exists(MULTI_SONG.path_join("tone.wav")) and not FileAccess.file_exists(MULTI_SONG.path_join("bg.png")),
+		"删除：音频与封面一起删掉")
+	_expect_close(Setting.song_offset_of(MULTI_SONG), 0.0, "删除：整首歌的单曲延迟一起清掉")
+	var leftovers := 0
+	for key: String in Scores.scores.keys():
+		if key == base or key.begins_with(base + "#"):
+			leftovers += 1
+	_expect(leftovers == 0, "删除：整首歌的成绩一起清掉（还剩 %d 条）" % leftovers)
+	_expect(picker.get_item_count() == 1 and picker.is_item_disabled(0), "删除：列表里不再有这首歌")
+	host.queue_free()
+	await get_tree().process_frame
+	_remove_tree(MULTI_SONG)
+	ChartLoader.selected_folder = ""
+	ChartLoader.selected_chart = ""
+	Setting.set_song_offset(FIXTURE_SONG, 0.0)
 
 
 # ---------------------------------------------------------------- 工具
@@ -2234,6 +2530,17 @@ func _blocked_point(root: Control, point: Vector2) -> bool:
 
 ## 轻点列表的某一项：安卓上引擎会把屏幕触摸转成模拟鼠标事件，ItemList 的选中走的就是
 ## 这条路；push_input 不会触发引擎的这份模拟，所以要在这里显式补上按下与抬起。
+## 选曲列表里某一首歌曲行的行号：谱面行会插在展开的歌曲行后面，ItemList 的行号与 _paths
+## 的下标不再一一对应（见 song_select._rows），所以自检要按 _rows 现查。
+func _song_row(select: Node, folder: String) -> int:
+	var rows: Array = select.get("_rows")
+	for index in rows.size():
+		var row: Dictionary = rows[index]
+		if str(row.kind) == "song" and str(row.folder) == folder:
+			return index
+	return -1
+
+
 func _tap_item(list: ItemList, index: int) -> void:
 	var point := list.get_global_rect().position + list.get_item_rect(index).get_center()
 	_push_touch(point, true)

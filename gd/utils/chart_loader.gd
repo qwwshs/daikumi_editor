@@ -10,6 +10,11 @@ var last_error: String = ""
 var timeline: BeatTimeline
 ## 当前选中的谱面文件夹：开始界面写入，游玩场景读取。
 var selected_folder: String = ""
+## 当前这张谱面（一个文件夹里可能有多张）；空串表示文件夹里的默认谱面。
+var selected_chart: String = ""
+## 当前文件夹里的全部谱面（ImportAPI.list_charts 的结果）：界面据此展开歌曲，
+## 成绩据此判断要不要按谱面分记（见 Scores.key_of）。
+var charts: Array[Dictionary] = []
 ## 结算快照；退出或重开不生成成绩。
 var last_result: Dictionary = {}
 
@@ -28,14 +33,24 @@ func accept_chart(data: Variant) -> bool:
 
 
 ## 读取整个谱面文件夹：清单、分散的音频/背景与外部读取器都由公共导入接口处理。
-func load_from_folder(folder: String) -> bool:
+## chart 为空时读文件夹里的默认谱面（多谱面文件夹是第一张），否则读指定的那张。
+func load_from_folder(folder: String, chart: String = "") -> bool:
 	if folder.is_empty():
 		last_error = "尚未选择谱面文件夹。"
 		return false
-	if not play_bundle(ImportAPI.resolve_directory(folder)):
+	charts = ImportAPI.list_charts(folder)
+	var bundle := ImportAPI.load_bundle_in(folder, chart)
+	if not play_bundle(bundle):
 		return false
 	selected_folder = folder
+	selected_chart = str(bundle.get("chart_path", ""))
 	return true
+
+
+## 当前这张谱面在成绩册里的键：文件夹里只有一张谱面时就是文件夹名，
+## 有多张时按谱面分记（见 Scores.key_of）。
+func score_key() -> String:
+	return Scores.key_of(selected_folder, selected_chart, charts.size())
 
 func readChart(path: String = "res://chart/Antithesis/chart.json", folder: String = "") -> bool:
 	# 显式给出文件夹时它就是这首歌的身份，单曲延迟按它取（见 Setting.song_offset_of）。

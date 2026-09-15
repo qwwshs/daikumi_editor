@@ -156,75 +156,198 @@ func load_bundle(chart_path: String, audio_path: String = "", background_path: S
 	return result
 
 
-## Manifest paths may be relative to the folder, absolute, or independent SAF
-## document URIs. A custom reader can resolve a folder with resolve_bundle().
-func resolve_directory(folder: String) -> Dictionary:
-	return _resolve_directory(folder, 0)
-
-
-func _resolve_directory(folder: String, depth: int) -> Dictionary:
+## 扫描一个文件夹：列出它里面所有可读的谱面（一张谱面文件一条），外加这个文件夹共享的
+## 音频、封面与子目录。多谱面打包（TAKANA 的各难度、dakumi 的多份 chart）就靠它枚举。
+## charts 的顺序即显示顺序：清单与读取器给的顺序优先，内置扫描把 chart.json 排在最前。
+## manifest 为真表示第一张谱面来自 dakumi.bundle.json，folder 是清单指定的上下文根目录
+## （清单没写就是空串，按扫描到的文件夹算）。
+func scan_folder(folder: String) -> Dictionary:
 	last_error = ""
 	var context := make_context("", folder)
+	var result := {"charts": [] as Array[Dictionary], "audio": "", "background": "", "directories": [] as Array[String], "manifest": false, "folder": ""}
+	var seen: Dictionary = {}
+	# 清单（dakumi.bundle.json）：指名的那张谱面排第一，音频/封面也以清单为准。
 	var manifest := Storage.resolve_path(folder, MANIFEST_NAME)
 	if FileAccess.file_exists(manifest):
 		var data: Variant = JSON.parse_string(Storage.read_bytes(manifest).get_string_from_utf8())
 		var chart := str(data.get("chart", "")) if data is Dictionary else ""
 		if not chart.is_empty():
-			var manifest_audio := str(data.get("audio", "")) if data is Dictionary else ""
-			var manifest_background := str(data.get("background", "")) if data is Dictionary else ""
-			var manifest_folder := str(data.get("folder", "")) if data is Dictionary else ""
-			var bundle := load_bundle(context.resolve(chart),
-				context.resolve(manifest_audio) if not manifest_audio.is_empty() else "",
-				context.resolve(manifest_background) if not manifest_background.is_empty() else "",
-				context.resolve(manifest_folder))
-			if not bundle.get("ok", false):
-				bundle.error = "dakumi.bundle.json 指向的文件无法读取：%s" % bundle.get("error", "")
-			return bundle
+			result.manifest = true
+			result.folder = _resolve_media(context, data, "folder")
+			_add_chart(result, context.resolve(chart), "", "", seen)
+			result.audio = _resolve_media(context, data, "audio")
+			result.background = _resolve_media(context, data, "background")
 		# 清单存在但没有可用的谱面路径时继续扫描目录，方便手写或修改清单。
+	# 扩展读取器：能一次列出多张谱面的走 scan_bundle（TAKANA 就在这一步给出各难度），
+	# 只会单张的继续用 resolve_bundle。读取器给的音频/封面优先于内置扫描。
 	for registered in _readers:
 		var reader: RefCounted = registered.reader
-		if reader.has_method("resolve_bundle"):
+		if reader.has_method("scan_bundle"):
+			var scanned: Variant = reader.call("scan_bundle", context)
+			if scanned is Dictionary:
+				_merge_scan(result, scanned, context, seen)
+		elif reader.has_method("resolve_bundle"):
 			var custom: Variant = reader.call("resolve_bundle", context)
-			if custom is Dictionary and custom.has("chart"):
-				return load_bundle(context.resolve(str(custom.chart)), context.resolve(str(custom.audio)) if custom.has("audio") and not str(custom.audio).is_empty() else "", context.resolve(str(custom.background)) if custom.has("background") and not str(custom.background).is_empty() else "", folder)
-	var candidates: Array[String] = []
-	var directories: Array[String] = []
-	var audio := ""
-	var background := ""
+			_merge_scan(result, custom, context, seen)
+	var audio_extension := ["mp3", "wav", "ogg"]
+	var image_extension := ["png", "jpg", "jpeg", "webp"]
+	var primary := ""
+	var rest: Array[Dictionary] = []
 	for entry in context.list():
 		if entry.is_dir:
-			directories.append(entry.path)
+			result.directories.append(entry.path)
 			continue
 		var filename: String = entry.name
 		var extension := filename.get_extension().to_lower()
-		if extension in ["mp3", "wav", "ogg"] and audio.is_empty():
-			audio = entry.path
-		elif extension in ["png", "jpg", "jpeg", "webp"] and background.is_empty():
-			background = entry.path
-		elif filename.to_lower() not in [MANIFEST_NAME, "skin.json", "manifest.json", "settings.json", "reader_plugins.json"]:
-			if extension == "json":
-				var value: Variant = JSON.parse_string(Storage.read_bytes(entry.path).get_string_from_utf8())
-				if value is Dictionary and (filename.to_lower() == "chart.json" or value.has("note") or value.has("bpm") or value.has("event")):
-					if filename.to_lower() == "chart.json":
-						candidates.push_front(entry.path)
-					else:
-						candidates.append(entry.path)
+		if extension in audio_extension:
+			if result.audio.is_empty():
+				result.audio = entry.path
+			continue
+		if extension in image_extension:
+			if result.background.is_empty():
+				result.background = entry.path
+			continue
+		var name := filename.to_lower()
+		if name in [MANIFEST_NAME, "skin.json", "manifest.json", "settings.json", "reader_plugins.json"] or name.ends_with(".t3proj") or seen.has(chart_identity(entry.path)):
+			continue
+		if extension == "json":
+			var value: Variant = JSON.parse_string(Storage.read_bytes(entry.path).get_string_from_utf8())
+			if not value is Dictionary or not (filename.to_lower() == "chart.json" or value.has("note") or value.has("bpm") or value.has("event")):
+				continue
+			if filename.to_lower() == "chart.json":
+				primary = entry.path
 			else:
-				for registered in _readers:
-					if registered.reader.has_method("can_read") and registered.reader.call("can_read", "chart", entry.path, context):
-						candidates.append(entry.path)
-						break
-	if not candidates.is_empty():
-		return load_bundle(candidates[0], audio, background, folder)
-	# A ZIP commonly has a single top-level song directory. Also handle song
-	# packs deterministically while keeping the recursion bounded.
+				# 谱面自报的难度名比文件名可读（dakumi 的 info.chart_name / info.level）。
+				# 只排队不落盘：chart.json 要排在这些内置候选的前面。
+				var info: Variant = value.get("info", {})
+				var label := str(info.get("difficulty", info.get("chart_name", ""))) if info is Dictionary else ""
+				var detail := str(info.get("level", "")) if info is Dictionary else ""
+				rest.append({"chart": entry.path, "label": label, "detail": detail})
+		else:
+			for registered in _readers:
+				if registered.reader.has_method("can_read") and registered.reader.call("can_read", "chart", entry.path, context):
+					rest.append({"chart": entry.path})
+					break
+	# chart.json 是 dakumi 自己的格式，排在扫描结果（含读取器结果）之外的内置候选最前面。
+	if not primary.is_empty():
+		_add_chart(result, primary, "", "", seen)
+	for queued in rest:
+		_add_chart(result, str(queued.chart), str(queued.label), str(queued.detail), seen)
+	return result
+
+
+## 记一张谱面：同名谱面只留一张，label/detail 由读取器或谱面自报，给不出就退回文件名。
+func _add_chart(result: Dictionary, path: String, label: String, detail: String, seen: Dictionary) -> void:
+	if path.is_empty():
+		return
+	var entry := {"chart": path, "label": label if not label.is_empty() else _chart_label(path), "detail": detail}
+	var key := chart_identity(path)
+	var index: int = seen.get(key, -1)
+	if index < 0:
+		seen[key] = result.charts.size()
+		result.charts.append(entry)
+		return
+	# 已经收过同一张谱面的另一份文件（TAKANA 的 master.json 与 master.editing.json）：
+	# 正式谱优先，但这次给的是正式谱就换掉先前那条（连标签一起换成新的）。
+	var previous := str(result.charts[index].chart).to_lower()
+	if previous.contains(".editing.") and not path.to_lower().contains(".editing."):
+		result.charts[index] = entry
+
+
+## 谱面身份：去掉 .editing 后的小写路径。TAKANA 编辑中的谱面与正式谱是同一张。
+static func chart_identity(path: String) -> String:
+	return path.to_lower().replace(".editing.", ".")
+
+
+## 文件名当标签：去掉 .editing（编辑中的工作谱与正式谱是同一张），转成大写。
+func _chart_label(path: String) -> String:
+	var name := path.get_file().to_lower().replace(".editing", "")
+	return name.get_basename().to_upper()
+
+
+## 清单里的一项路径（可能为空、可能相对、可能是 SAF 文档 URI）。
+func _resolve_media(context: DakumiImportContext, manifest: Variant, key: String) -> String:
+	var value := str(manifest.get(key, "")) if manifest is Dictionary else ""
+	return context.resolve(value) if not value.is_empty() else ""
+
+
+## 把读取器返回的 {"charts": [...], "chart": ..., "audio": ..., "background": ...} 并进扫描结果，
+## 顺带把相对路径解析成绝对/SAF 路径。charts 里每条可以是路径，也可以是 {chart,label,detail}。
+func _merge_scan(result: Dictionary, scanned: Dictionary, context: DakumiImportContext, seen: Dictionary) -> void:
+	var charts: Array = scanned.get("charts", [])
+	if charts.is_empty() and scanned.has("chart"):
+		charts = [scanned.chart]
+	for value in charts:
+		var entry: Dictionary = value if value is Dictionary else {"chart": value}
+		_add_chart(result, context.resolve(str(entry.get("chart", ""))), str(entry.get("label", "")), str(entry.get("detail", "")), seen)
+	for key in ["audio", "background"]:
+		var media := str(scanned.get(key, ""))
+		if not media.is_empty() and str(result[key]).is_empty():
+			result[key] = context.resolve(media)
+
+
+## 真正装着谱面的那一层：ZIP 常见「压缩包下一层才是歌曲文件夹」，所以顶层没谱面时往下找一层。
+## 返回 {"folder": 那一层的路径, "scan": scan_folder 的结果}；找不到时返回空字典并写好 last_error。
+func locate_bundle_root(folder: String, depth: int = 0) -> Dictionary:
+	var scan := scan_folder(folder)
+	if not scan.charts.is_empty():
+		return {"folder": folder, "scan": scan}
 	if depth < 8:
-		for directory in directories:
-			var nested := _resolve_directory(directory, depth + 1)
-			if nested.get("ok", false):
+		for directory in scan.directories:
+			var nested := locate_bundle_root(directory, depth + 1)
+			if not nested.is_empty():
 				return nested
 	last_error = "文件夹内未找到可读取的谱面；自定义格式请先启用读取扩展，或使用分散文件导入。"
+	return {}
+
+
+## 一个文件夹里的全部谱面：选曲界面据此展开歌曲，charts[0] 就是不带谱面路径时的默认选择。
+## assign() 不是多余的：scan 里的数组经过 Dictionary 取出后只是普通 Array，
+## 直接返回会让「var charts: Array[Dictionary] = list_charts(...)」这种写法在运行时炸掉。
+func list_charts(folder: String) -> Array[Dictionary]:
+	var charts: Array[Dictionary] = []
+	var root := locate_bundle_root(folder)
+	if not root.is_empty():
+		charts.assign(root.scan.charts)
+	return charts
+
+
+## Manifest paths may be relative to the folder, absolute, or independent SAF
+## document URIs. A custom reader can resolve a folder with resolve_bundle().
+func resolve_directory(folder: String) -> Dictionary:
+	var root := locate_bundle_root(folder)
+	if root.is_empty():
+		return {"ok": false, "error": last_error}
+	var scan: Dictionary = root.scan
+	var bundle := _scan_bundle(root, str(scan.charts[0].chart))
+	# 清单指名的那张谱面读不出来时要报「清单指向的文件无法读取」，而不是笼统的扫描失败：
+	# 手写清单写错路径是最常见的用法错误。
+	if scan.manifest and not bundle.get("ok", false):
+		bundle.error = "dakumi.bundle.json 指向的文件无法读取：%s" % bundle.get("error", "")
+	return bundle
+
+
+## 按指定谱面文件读一个文件夹：选曲界面在多谱面文件夹里点哪张就读哪张，
+## 音频与封面仍取整个文件夹共享的那一份。
+func load_bundle_in(folder: String, chart_path: String) -> Dictionary:
+	if chart_path.is_empty():
+		return resolve_directory(folder)
+	var root := locate_bundle_root(folder)
+	if root.is_empty():
+		return {"ok": false, "error": last_error}
+	var resolved := make_context("", root.folder).resolve(chart_path)
+	for entry in root.scan.charts:
+		if str(entry.chart) == resolved:
+			return _scan_bundle(root, resolved)
+	last_error = "找不到这张谱面，可能刚刚被删掉了：%s" % Storage.display_name(chart_path)
 	return {"ok": false, "error": last_error}
+
+
+## 用扫描结果加载其中一张谱面：音频、封面、上下文目录都取这个文件夹共享的那一份。
+func _scan_bundle(root: Dictionary, chart_path: String) -> Dictionary:
+	var scan: Dictionary = root.scan
+	var folder := str(scan.folder)
+	return load_bundle(chart_path, str(scan.audio), str(scan.background), folder if not folder.is_empty() else str(root.folder))
 
 
 ## Store a portable library entry. Sidecars retain their folder layout, while

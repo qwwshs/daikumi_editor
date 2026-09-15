@@ -379,17 +379,90 @@ func _validate_zip_budget(path: String) -> bool:
 	return true
 
 
-func library_directories() -> Array[Dictionary]:
-	var result: Array[Dictionary] = []
+## 谱面库的根目录们：当前写入位置、私有目录里的旧库，以及安卓上的旧公有目录。
+func library_roots() -> Array[String]:
 	var roots: Array[String] = [chart_dir]
 	if chart_dir != "user://chart":
 		roots.append("user://chart")
 	if OS.get_name() == "Android":
 		roots.append(LEGACY_PUBLIC_ROOT.path_join("chart"))
-	for library_root in roots:
+	return roots
+
+
+func library_directories() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for library_root in library_roots():
 		if not DirAccess.dir_exists_absolute(library_root):
 			continue
 		for entry in list_directory(library_root):
 			if entry.is_dir:
 				result.append(entry)
 	return result
+
+
+## 删除一个谱面文件夹（整首歌）。只允许删谱面库里的内容：库根自己与库外路径一律拒绝，
+## 免得路径拼错就把整个谱面库或别的目录删掉。成功后广播 storage_changed，界面据此刷新。
+func delete_tree(path: String) -> bool:
+	last_error = ""
+	var target := path.strip_edges().rstrip("/")
+	if not _deletable(target):
+		last_error = "只能删除谱面库里的内容：%s" % display_name(path)
+		return false
+	if not _remove_tree(target, 0):
+		return false
+	storage_changed.emit()
+	return true
+
+
+## 删除单个文件（删除一张谱面用），同样限制在谱面库内。
+func delete_file(path: String) -> bool:
+	last_error = ""
+	if not _deletable(path):
+		last_error = "只能删除谱面库里的内容：%s" % display_name(path)
+		return false
+	if not _remove(path):
+		return false
+	storage_changed.emit()
+	return true
+
+
+## 库内的路径 = 某个库根的子项，且相对部分不为空、不含 ..（后者能拼出库外的路径）。
+func _deletable(path: String) -> bool:
+	if path.is_empty() or path.begins_with("res://"):
+		return false
+	for root in library_roots():
+		var base := root.trim_suffix("/")
+		if not (path.begins_with(base + "/") or path.begins_with(base + "#")):
+			continue
+		var rest := path.trim_prefix(base).trim_prefix("/").trim_prefix("#")
+		if not rest.is_empty() and not rest.contains(".."):
+			return true
+	return false
+
+
+## 递归删除文件夹：先删内容再删自己，深度上限与导入一致。
+## 中途有任何一项删不掉就停下并报错（已经删掉的部分不会恢复——删除本来就不保证可回滚）。
+func _remove_tree(path: String, depth: int) -> bool:
+	if depth > 32:
+		last_error = "文件夹层级超过 32 层，已停止删除。"
+		return false
+	if DirAccess.dir_exists_absolute(path):
+		last_error = ""
+		var entries := list_directory(path)
+		if not last_error.is_empty():
+			return false
+		for entry in entries:
+			if entry.is_dir:
+				if not _remove_tree(entry.path, depth + 1):
+					return false
+			elif not _remove(entry.path):
+				return false
+	return _remove(path)
+
+
+func _remove(path: String) -> bool:
+	var result := DirAccess.remove_absolute(path)
+	if result != OK:
+		last_error = "无法删除：%s（错误码 %d）" % [display_name(path), result]
+		return false
+	return true

@@ -30,9 +30,17 @@ func load_scores() -> void:
 	var config := ConfigFile.new()
 	if config.load(file_path) != OK or not config.has_section(SECTION):
 		return
-	for folder: String in config.get_section_keys(SECTION):
-		var key := Setting.song_key(folder)
-		var entry := _normalize(config.get_value(SECTION, folder, {}))
+	for stored: String in config.get_section_keys(SECTION):
+		var key := Setting.song_key(stored)
+		# 一个文件夹里有多张谱面时，键是「文件夹#谱面」；song_key 会把 # 之后当 SAF 相对路径砍掉，
+		# 这里把谱面那半截补回来（SAF 路径的 # 在 song_key 里已经单独处理过，不会走到这里）。
+		# 只在真的带 # 时才补：get_slice 越界会原样返回整串，拿它判断会把「自检曲目」拼成「自检曲目#自检曲目」。
+		var chart := ""
+		if not stored.begins_with("content://") and stored.get_slice_count("#") > 1:
+			chart = stored.get_slice("#", 1).to_lower()
+		if not chart.is_empty():
+			key += "#" + chart
+		var entry := _normalize(config.get_value(SECTION, stored, {}))
 		if not key.is_empty() and not entry.is_empty():
 			scores[key] = entry
 
@@ -51,20 +59,43 @@ func save_scores() -> void:
 		push_warning("成绩保存失败，错误码：%s" % result)
 
 
-## 某首歌的最好成绩；没有就是空字典，界面据此显示占位符。
-func best(folder: String) -> Dictionary:
-	var key := Setting.song_key(folder)
+## 成绩在成绩册里的键。只有一张谱面的文件夹沿用文件夹名——这次改动之前记的成绩都在那个键上，
+## 仍然读得出来；一个文件夹里有多张谱面时按「文件夹#谱面」分开记，各难度不再互相覆盖。
+## chart_count 由调用方给出（它知道这个文件夹里有几张谱面，见 ChartLoader.charts）。
+func key_of(folder: String, chart: String = "", chart_count: int = 0) -> String:
+	var base := Setting.song_key(folder)
+	if base.is_empty():
+		return ""
+	var stem := Setting.chart_key(chart)
+	if stem.is_empty():
+		return base
+	return base + "#" + stem if chart_count > 1 or _scoped(base) else base
+
+
+## 这个文件夹已经在按谱面分记成绩了吗（成绩册里有它的「文件夹#谱面」键）。
+## 删掉一张谱面后文件夹里只剩一张，剩下的成绩还留在原来那张谱面的键上，不能被当成整首歌的成绩。
+func _scoped(base: String) -> bool:
+	var prefix := base + "#"
+	for key: String in scores:
+		if key.begins_with(prefix):
+			return true
+	return false
+
+
+## 某首歌（或其中一张谱面）的最好成绩；没有就是空字典，界面据此显示占位符。
+func best(folder: String, chart: String = "", chart_count: int = 0) -> Dictionary:
+	var key := key_of(folder, chart, chart_count)
 	return scores.get(key, {}) if not key.is_empty() else {}
 
 
-func plays(folder: String) -> int:
-	return int(best(folder).get("plays", 0))
+func plays(folder: String, chart: String = "", chart_count: int = 0) -> int:
+	return int(best(folder, chart, chart_count).get("plays", 0))
 
 
 ## 记录一局：无论好坏都算一次游玩，只有分数更高才替换成绩快照。
 ## 返回 true 表示刷新了最高分，结算界面据此显示「新纪录」。
-func record(folder: String, result: Dictionary) -> bool:
-	var key := Setting.song_key(folder)
+func record(folder: String, result: Dictionary, chart: String = "", chart_count: int = 0) -> bool:
+	var key := key_of(folder, chart, chart_count)
 	if key.is_empty() or result.is_empty():
 		return false
 	var entry: Dictionary = scores.get(key, {}).duplicate(true)
@@ -88,11 +119,46 @@ func record(folder: String, result: Dictionary) -> bool:
 	return is_best
 
 
+## 删掉一张谱面的成绩（删谱面时调用）。文件夹里只剩一张谱面时成绩记在文件夹名上，
+## 那一条由 forget_song 处理——删掉最后一张谱面就等于删掉了整首歌。
+func forget_chart(folder: String, chart: String) -> bool:
+	var base := Setting.song_key(folder)
+	var stem := Setting.chart_key(chart)
+	return _erase(base + "#" + stem) if not base.is_empty() and not stem.is_empty() else false
+
+
+## 删掉整首歌的成绩：文件夹名那一键，以及按谱面分记的所有键。
+func forget_song(folder: String) -> bool:
+	var base := Setting.song_key(folder)
+	if base.is_empty():
+		return false
+	var prefix := base + "#"
+	var removed := false
+	for key: String in scores.keys():
+		if key == base or key.begins_with(prefix):
+			scores.erase(key)
+			removed = true
+	if not removed:
+		return false
+	save_scores()
+	score_changed.emit(base)
+	return true
+
+
 ## 清空整本成绩（目前只有自检用；界面里没有入口）。
 func clear() -> void:
 	scores.clear()
 	save_scores()
 	score_changed.emit("")
+
+
+func _erase(key: String) -> bool:
+	if not scores.has(key):
+		return false
+	scores.erase(key)
+	save_scores()
+	score_changed.emit(key)
+	return true
 
 
 ## 读盘 / 记录都走这里：坏值一律丢掉或归零，不让外部数据决定界面显示什么。

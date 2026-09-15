@@ -216,9 +216,11 @@ func _show_results() -> void:
 
 
 ## 结算快照 + 记成绩：无论好坏都算一次游玩，分数更高才刷新最好成绩（见 Scores.record）。
+## 成绩记在「这首歌 + 这张谱面」上：一个文件夹里有多张谱面时各记各的（见 Scores.key_of）。
 ## 单独抽成一个不切场景的函数，自检才能直接验证「一局结束后成绩进了成绩册」。
 func finish_run() -> void:
 	ChartLoader.last_result = session.result_summary()
 	ChartLoader.last_result.info = ChartLoader.chart_data.info.duplicate(true)
 	ChartLoader.last_result.background = ChartLoader.bg
-	ChartLoader.last_result.is_best = Scores.record(ChartLoader.selected_folder, ChartLoader.last_result)
+	ChartLoader.last_result.is_best = Scores.record(ChartLoader.selected_folder, ChartLoader.last_result,
+		ChartLoader.selected_chart, ChartLoader.charts.size())

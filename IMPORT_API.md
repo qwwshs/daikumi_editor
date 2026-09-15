@@ -40,15 +40,35 @@
 
 ### 目录扫描规则
 
-只导入文件夹（或读取一个包含多个文件的目录）时，`ImportAPI.resolve_directory()` 按以下顺序寻找谱面：
+只导入文件夹（或读取一个包含多个文件的目录）时，`ImportAPI.scan_folder()` 按以下顺序收集**该文件夹里所有能读的谱面**：
 
-1. 目录内存在 `dakumi.bundle.json` → 按清单加载（见下）。
-2. 任一已启用读取器实现 `resolve_bundle(context)` → 由它返回清单字典。
+1. 目录内存在 `dakumi.bundle.json` → 清单指名的那张谱面排第一，音频／封面以清单为准（见下）。
+2. 任一已启用读取器实现 `scan_bundle(context)` → 由它一次给出多张谱面（TAKANA 的各难度就走这里）；只实现了 `resolve_bundle(context)` 的读取器按单张处理。
 3. 扫描目录内文件：
    - 第一个 `mp3` / `wav` / `ogg` 作为音乐，第一个 `png` / `jpg` / `jpeg` / `webp` 作为背景；
    - 名为 `chart.json` 的 JSON 优先，其它包含 `note` / `bpm` / `event` 字段的 JSON 依次候补；
    - 能被某个读取器 `can_read("chart", ...)` 识别的文件也会成为候选。
 4. 都没找到时递归进入子目录（最多 8 层，兼容压缩包解出的「单层歌曲文件夹」结构）。
+
+`ImportAPI.resolve_directory()` 仍然只返回**一张**谱面（扫描结果里的第一张），旧调用方不必改；要多张请用 `list_charts()`。
+
+### 多谱面文件夹
+
+一个歌曲文件夹里可以放多张谱面：`chart.json`、`easy.json` / `hard.json` 这类额外的 JSON，或读取器给出的任意文件。规则：
+
+- **顺序即显示顺序**：清单与读取器给的顺序优先，内置扫描把 `chart.json` 排在这些候选的前面；其余按文件名排序。
+- **同一张谱面只列一次**：身份是去掉 `.editing` 后的小写路径（`ImportAPI.chart_identity()`），所以 TAKANA 的 `master.json` 与 `master.editing.json` 算同一张，正式谱优先。
+- **标签**：读取器给的难度名优先，其次是 `chart.json` 之外的内置候选自报的 `info.difficulty` / `info.chart_name`（等级取 `info.level`），都没有就退回大写文件名。
+- **音频／封面是共享的**：整个文件夹一份，属于歌曲而不属于某张谱面。
+
+```gdscript
+var charts: Array[Dictionary] = ImportAPI.list_charts(folder)   # [{chart, label, detail}, ...]
+ChartLoader.load_from_folder(folder, charts[1].chart)            # 空串 = 用第一张
+```
+
+选曲界面里，点开一首歌会在它下面展开全部谱面（`●` 标出当前选中的那张），点谱面行即切换。删除入口在「管理 ▾」菜单里，删谱面与删整首歌都要在确认框里点「删除」才生效。
+
+成绩按「文件夹 + 谱面」记录（`Scores.key_of()`）：**文件夹里只有一张谱面时沿用文件夹名**，所以这次改动之前记的成绩照样读得出来；有多张时键变成 `文件夹#谱面文件名`，各难度互不覆盖。
 
 ## 存储位置
 
@@ -86,6 +106,21 @@ func read_background(path: String, context: DakumiImportContext) -> Texture2D
 - `read_*()` 返回 `null` 表示「这个文件我读不了」：`ImportAPI` 会继续询问下一个读取器，最后回退到内置解码器。返回非 `null` 即视为成功。
 - `read_chart()` 可以返回 `Dictionary`（已解析的谱面对象）或 `String`（谱面文本，交给内置 JSON 解析）。
 - 可选实现 `resolve_bundle(context: DakumiImportContext) -> Dictionary`：目录扫描时用来声明「这个文件夹里谱面／音乐／背景分别是哪个文件」，返回形如 `{"chart": "song.xchart", "audio": "song.xaudio", "background": "cover.png"}`。路径可以是相对于该文件夹的相对路径，也可以是完全独立的 SAF URI。
+- 可选实现 `scan_bundle(context: DakumiImportContext) -> Dictionary`：一个文件夹里有多张谱面（多个难度）时改用它：
+
+  ```gdscript
+  func scan_bundle(context: DakumiImportContext) -> Dictionary:
+      return {
+          "charts": [                                  # 顺序即显示顺序
+              {"chart": "normal.json", "label": "NORMAL", "detail": "Lv.7"},
+              "hard.json",                             # 只给路径也行，标签退回文件名
+          ],
+          "audio": "song.mp3",
+          "background": "cover.png",
+      }
+  ```
+
+  `charts` 里每条可以是路径字符串，也可以是 `{chart, label, detail}`（`label` 显示在谱面行上，`detail` 是等级之类的补充）。同时实现了 `scan_bundle` 时它优先，`resolve_bundle` 不再被调用。
 
 约定：
 
@@ -163,7 +198,11 @@ func read_chart(path: String, context: DakumiImportContext) -> Variant:
 | `load_audio(path, context_root = "") -> AudioStream` | 读取音频。 |
 | `load_background(path, context_root = "") -> Texture2D` | 读取背景图。 |
 | `load_bundle(chart_path, audio_path = "", background_path = "", folder = "") -> Dictionary` | 一次性加载三者，返回 `{ok, data, music, bg, chart_path, audio_path, background_path, folder, error}`；任一失败即 `ok = false` 并填写 `error`。 |
-| `resolve_directory(folder) -> Dictionary` | 按目录扫描规则加载整个文件夹，返回结构与 `load_bundle()` 相同。 |
+| `resolve_directory(folder) -> Dictionary` | 按目录扫描规则加载整个文件夹，返回结构与 `load_bundle()` 相同；只加载第一张谱面。 |
+| `scan_folder(folder) -> Dictionary` | 列出文件夹里所有可读的谱面与共享素材：`{charts: Array[Dictionary], audio, background, directories, manifest, folder}`。`charts` 每条是 `{chart, label, detail}`。 |
+| `list_charts(folder) -> Array[Dictionary]` | `scan_folder()` 的谱面部分，找不到谱面时返回空数组（并把原因写进 `last_error`）；`charts[0]` 就是默认谱面。 |
+| `load_bundle_in(folder, chart_path) -> Dictionary` | 读文件夹里的指定谱面，音频／封面仍取整个文件夹共享的那一份；返回结构与 `load_bundle()` 相同。 |
+| `chart_identity(path) -> String`（静态） | 谱面身份：去掉 `.editing` 后的小写路径，用来判断两份文件是不是同一张谱面。 |
 | `import_files(chart_path, audio_path = "", background_path = "", chart_folder = "") -> String` | 复制并登记一份谱面，返回导入后的目录；失败返回空串。只传 `chart_folder` 时整棵树被复制。 |
 | `import_plugin(path) -> String` | 把 `.gd` 读取器安装到 `users/readers/`，返回 id（内容 SHA-256）；**不启用**。 |
 | `list_plugins() -> Array[Dictionary]` | 已安装读取器：`{id, name, path, enabled}`。 |
@@ -188,9 +227,14 @@ func read_chart(path: String, context: DakumiImportContext) -> Variant:
 | `base_directory(path) -> String` | 取所在目录；单个 SAF 文档授权没有同级目录，返回空串。 |
 | `display_name(path) -> String` | 用于显示的文件名（URI 解码、去掉 SAF 片段）。 |
 | `unique_path(folder, filename) -> String` | 生成不冲突的目标路径。 |
+| `delete_file(path) -> bool` | 删掉单个文件（删一张谱面用）。只允许删库内的内容，见下。 |
+| `delete_tree(path) -> bool` | 递归删掉一个谱面文件夹（删整首歌用）。同样只允许删库内的内容。 |
 | `library_directories() -> Array[Dictionary]` | 谱面库里所有可加载的文件夹，供开始界面列出。 |
+| `library_roots() -> Array[String]` | 谱面库的根目录（`chart_dir`，以及可能的旧位置），删除操作的允许范围。 |
 | `root_path` / `chart_dir` / `users_dir` / `is_public` / `status_message` / `last_error` | 当前存储状态。 |
 | `storage_changed` / `library_changed(new_path)` | 存储位置变化 / 导入完成信号。 |
+
+删除是不可回滚的，所以 `delete_file()` / `delete_tree()` 只接受 `library_roots()` 里的某个根目录的**子项**：根目录自己、`res://`、空路径、以及任何含 `..` 的路径一律拒绝（`Storage.last_error` 给中文原因）。成功后会发出 `storage_changed`，界面据此刷新。`user://` 私有库也算库，所以私有目录下的谱面同样能删——删的始终是谱面，不是素材。
 
 ## Android 说明
 

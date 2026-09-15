@@ -264,6 +264,12 @@ static func song_key(folder: String) -> String:
 	return name.uri_decode().get_file()
 
 
+## 一张谱面的身份（成绩册里按谱面分记时用）：文件名去掉后缀，再去掉 .editing。
+## TAKANA 的 master.json 与 master.editing.json 是同一张谱面，必须算同一个身份。
+static func chart_key(chart: String) -> String:
+	return song_key(chart).to_lower().replace(".editing", "").get_basename()
+
+
 ## 某首歌的单曲延迟（毫秒）；没调过就是 0。
 func song_offset_of(folder: String) -> float:
 	var key := song_key(folder)
