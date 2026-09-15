@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/self_check.gd" id="1_check"]
+
+[node name="SelfCheck" type="Node"]
+script = ExtResource("1_check")

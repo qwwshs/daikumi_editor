@@ -1,0 +1,13 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# 构建与截图产物：本地保留，不进仓库
+/artifacts/
+# 清理旧文件时打的备份包
+.removed-legacy-*.tar.gz
+# 自检 / 探针的日志与沙盒数据（tests/runtime_data 是自检用的 user:// 目录）
+/tests/*.log
+/tests/runtime_data/
+# 编辑器本地配置
+/.vscode/

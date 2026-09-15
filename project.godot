@@ -1,0 +1,57 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="dakumi"
+config/description="dakumi游玩器"
+config/version="0.0.1alpha"
+config/tags=PackedStringArray("rhythm")
+run/main_scene="uid://buocse8j3hhcp"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+boot_splash/bg_color=Color(0, 0, 0, 1)
+boot_splash/image="uid://cesmxe1wup7bn"
+config/icon="uid://cesmxe1wup7bn"
+
+[autoload]
+
+Storage="*res://gd/services/storage.gd"
+Setting="*res://gd/utils/setting.gd"
+Skins="*res://gd/services/skin.gd"
+ImportAPI="*res://gd/services/import_api.gd"
+Scores="*res://gd/services/scores.gd"
+ChartLoader="*uid://duwyrsbsl7e8y"
+Easings="*uid://tpt7xbb7ogcq"
+Bezier="*uid://djkslsdptlavw"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[gui]
+
+theme/custom_font="uid://b73b4dumv4mdi"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
