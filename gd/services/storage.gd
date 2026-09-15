@@ -298,12 +298,25 @@ func _valid_relative_path(path: String) -> bool:
 ## Validate paths and declared uncompressed sizes BEFORE creating output files.
 func import_zip(path: String) -> String:
 	last_error = ""
-	if not _validate_zip_budget(path):
+	var target := unique_path(chart_dir, _safe_name(display_name(path).get_basename()))
+	if not extract_zip(path, target):
 		return ""
+	library_changed.emit(target)
+	return target
+
+
+## 把 ZIP 解压到一个指定目录：先整包校验（越界路径、重名、大小），再落盘。
+## 曲包导入（.t3bundle / .t3pkg）也要用它，所以目录名由调用方决定。
+func extract_zip(path: String, target: String) -> bool:
+	last_error = ""
+	if target.is_empty():
+		target = unique_path(chart_dir, _safe_name(display_name(path).get_basename()))
+	if not _validate_zip_budget(path):
+		return false
 	var reader := ZIPReader.new()
 	if reader.open(path) != OK:
 		last_error = "ZIP 无法打开，文件可能已损坏。"
-		return ""
+		return false
 	var names := reader.get_files()
 	var seen: Dictionary = {}
 	for name in names:
@@ -311,7 +324,7 @@ func import_zip(path: String) -> String:
 		if not _valid_relative_path(name) or seen.has(key):
 			last_error = "ZIP 含越界路径、重复名称或不兼容的文件名：%s" % name
 			reader.close()
-			return ""
+			return false
 		seen[key] = name.ends_with("/")
 	for key in seen:
 		var ancestor: String = key.get_base_dir()
@@ -319,9 +332,8 @@ func import_zip(path: String) -> String:
 			if seen.has(ancestor) and not seen[ancestor]:
 				last_error = "ZIP 的文件与目录名称冲突：%s" % key
 				reader.close()
-				return ""
+				return false
 			ancestor = ancestor.get_base_dir()
-	var target := unique_path(chart_dir, _safe_name(display_name(path).get_basename()))
 	for name in names:
 		var output := target.path_join(name)
 		if name.ends_with("/"):
@@ -333,10 +345,7 @@ func import_zip(path: String) -> String:
 			if not write_bytes(output, data):
 				break
 	reader.close()
-	if not last_error.is_empty():
-		return ""
-	library_changed.emit(target)
-	return target
+	return last_error.is_empty()
 
 
 func _validate_zip_budget(path: String) -> bool:
@@ -379,6 +388,67 @@ func _validate_zip_budget(path: String) -> bool:
 	return true
 
 
+## 在谱面库里新建一个文件夹（用来给歌曲分组）。目录名会做文件名校验；
+## 重名自动改成「名字 (2)」而不是报错——玩家想要的是一个装歌的地方，不是一次报错。
+func create_folder(folder: String, name: String) -> String:
+	last_error = ""
+	var base := folder.strip_edges().rstrip("/")
+	if base.is_empty():
+		base = chart_dir
+	if not _inside_library(base):
+		last_error = "只能在谱面库里新建文件夹。"
+		return ""
+	var safe := display_name(name).validate_filename().strip_edges().trim_suffix(".")
+	if safe.is_empty() or not _valid_relative_path(safe):
+		last_error = "文件夹名字里有不能用的字符：%s" % name
+		return ""
+	var target := unique_path(base, safe)
+	if DirAccess.make_dir_recursive_absolute(target) != OK:
+		last_error = "无法创建文件夹：%s" % safe
+		return ""
+	storage_changed.emit()
+	return target
+
+
+## 把一首歌（或一整个文件夹）挪到另一个文件夹里（空串 = 谱面库根目录）。
+## 成绩与单曲延迟按文件夹名记，所以挪位置不会丢；同名时新位置下的名字会自动加「(2)」。
+func move_tree(source: String, folder: String) -> String:
+	last_error = ""
+	var from := source.strip_edges().rstrip("/")
+	var into := folder.strip_edges().rstrip("/")
+	if into.is_empty():
+		into = chart_dir
+	if not _inside_library(from):
+		last_error = "只能移动谱面库里的内容：%s" % display_name(source)
+		return ""
+	if not _inside_library(into):
+		last_error = "只能移动到谱面库里的文件夹。"
+		return ""
+	if from == into or into.begins_with(from + "/"):
+		last_error = "不能把文件夹移动到它自己里面。"
+		return ""
+	if from.get_base_dir().rstrip("/") == into:
+		return from
+	var target := unique_path(into, _safe_name(display_name(from)))
+	if not _move_tree(from, target):
+		return ""
+	storage_changed.emit()
+	return target
+
+
+## 移动一格：同一个卷上直接改名最快，失败（跨卷：私有目录 ↔ 公有目录）时退回「复制 + 删除」。
+## 复制这条路万一删不掉源目录，会在 last_error 里说清楚新位置仍然可用，免得玩家以为歌丢了。
+func _move_tree(source: String, target: String) -> bool:
+	if DirAccess.rename_absolute(source, target) == OK:
+		return true
+	if not _copy_tree(source, target, {"count": 0, "bytes": 0}, 0):
+		return false
+	if not _remove_tree(source, 0):
+		last_error = "已复制到新位置，但没能删除原来的文件夹：%s" % last_error
+		return false
+	return true
+
+
 ## 谱面库的根目录们：当前写入位置、私有目录里的旧库，以及安卓上的旧公有目录。
 func library_roots() -> Array[String]:
 	var roots: Array[String] = [chart_dir]
@@ -405,7 +475,7 @@ func library_directories() -> Array[Dictionary]:
 func delete_tree(path: String) -> bool:
 	last_error = ""
 	var target := path.strip_edges().rstrip("/")
-	if not _deletable(target):
+	if not _inside_library(target, false):
 		last_error = "只能删除谱面库里的内容：%s" % display_name(path)
 		return false
 	if not _remove_tree(target, 0):
@@ -417,7 +487,7 @@ func delete_tree(path: String) -> bool:
 ## 删除单个文件（删除一张谱面用），同样限制在谱面库内。
 func delete_file(path: String) -> bool:
 	last_error = ""
-	if not _deletable(path):
+	if not _inside_library(path, false):
 		last_error = "只能删除谱面库里的内容：%s" % display_name(path)
 		return false
 	if not _remove(path):
@@ -426,16 +496,21 @@ func delete_file(path: String) -> bool:
 	return true
 
 
-## 库内的路径 = 某个库根的子项，且相对部分不为空、不含 ..（后者能拼出库外的路径）。
-func _deletable(path: String) -> bool:
+## 库内的路径 = 某个库根的子项，不含 ..（后者能拼出库外的路径）。
+## allow_root 决定库根本身算不算数：删除时不算（免得路径拼错就把整个谱面库删了），
+## 建文件夹 / 移动到的目标地点算（谱面库根目录就是最外层的那一级）。
+func _inside_library(path: String, allow_root: bool = true) -> bool:
 	if path.is_empty() or path.begins_with("res://"):
 		return false
 	for root in library_roots():
 		var base := root.trim_suffix("/")
-		if not (path.begins_with(base + "/") or path.begins_with(base + "#")):
+		# 库根本身也算库内（新建 / 移动到根目录就落在它上面），是不是允许由 allow_root 决定。
+		if path != base and not (path.begins_with(base + "/") or path.begins_with(base + "#")):
 			continue
 		var rest := path.trim_prefix(base).trim_prefix("/").trim_prefix("#")
-		if not rest.is_empty() and not rest.contains(".."):
+		if rest.contains(".."):
+			continue
+		if not rest.is_empty() or allow_root:
 			return true
 	return false
 

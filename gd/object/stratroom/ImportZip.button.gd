@@ -1,8 +1,10 @@
 extends Button
-## 导入谱面：ZIP 压缩包或整个谱面文件夹。
-## 复制、大小校验、解压与安全文件名检查都由 Storage 完成；这里只负责选择与提示。
+## 导入谱面：ZIP 压缩包、整个谱面文件夹，或 TAKANA 曲包（.t3bundle / .t3pkg）。
+## 复制、大小校验、解压与安全文件名检查都由 Storage / ImportAPI 完成；这里只负责选择与提示。
 
 const ZIP_FILTERS: PackedStringArray = ["*.zip ; ZIP 压缩包"]
+## 曲包过滤器：.t3bundle 是一批歌，.t3pkg 是单个歌包，导入结果都等同于导入一个歌曲文件夹。
+const BUNDLE_FILTERS: PackedStringArray = ["*.t3bundle, *.t3pkg ; TAKANA 曲包"]
 
 
 func _ready() -> void:
@@ -15,12 +17,16 @@ func _on_pressed() -> void:
 	var menu := PopupMenu.new()
 	menu.add_item("导入 ZIP 压缩包", 0)
 	menu.add_item("导入谱面文件夹", 1)
-	menu.id_pressed.connect(func(id: int) -> void:
+	menu.add_item("导入 TAKANA 曲包（.t3bundle / .t3pkg）", 2)
+	# 处理函数先绑到变量上：match 直接写在 connect(...) 的参数位置时，
+	# 解析器会把右括号当成 match 模式的一部分。
+	var handle := func(id: int) -> void:
 		menu.queue_free()
-		if id == 0:
-			_import_zip()
-		else:
-			_import_folder())
+		match id:
+			0: _import_zip()
+			1: _import_folder()
+			2: _import_bundle()
+	menu.id_pressed.connect(handle)
 	add_child(menu)
 	menu.popup_centered()
 
@@ -40,6 +46,15 @@ func _import_folder() -> void:
 			return
 		var target := ImportAPI.import_files("", "", "", path)
 		_report("谱面文件夹", target))
+
+
+## TAKANA 曲包：一个文件里装着若干首歌（内层还可能是各自打包的单曲包），
+## 导入后库里多一个以曲包命名的文件夹，里面每首歌各占一个子文件夹。
+func _import_bundle() -> void:
+	Storage.pick_file(self, BUNDLE_FILTERS, func(path: String) -> void:
+		if path.is_empty():
+			return
+		_report("曲包", ImportAPI.import_bundle(path)))
 
 
 func _report(what: String, target: String) -> void:

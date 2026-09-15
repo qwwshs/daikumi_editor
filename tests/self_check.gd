@@ -49,6 +49,8 @@ const EVENT_CHART := """
 var _passed: int = 0
 var _failures: Array[String] = []
 var _probe: Node2D
+## 最近一次造 ZIP 夹具失败的原因（写不出夹具时断言里带上它）。
+var _zip_error: String = ""
 
 ## 选曲 / 结算界面自检用的谱面夹具：曲名、难度、曲师、谱师都写全，背景用固定颜色。
 const SONG_CHART := """
@@ -64,8 +66,14 @@ const SONG_CHART := """
 """
 ## 夹具背景色：像素断言要在这个颜色上量，所以要挑一个不会被主题色撞上的蓝。
 const FIXTURE_ART := Color(0.10, 0.40, 0.80, 1.0)
-## 谱面库夹具的文件夹名：前缀相同，保证自然排序时“真谱面”排在假文件夹前面。
+## 谱面库夹具的文件夹名：前缀相同，保证自然排序时这几首歌排在假文件夹前面
+## （「a_song」<「ab_broken」<「ac_spare」<「b_filler_00」）。列表只有十几行高，
+## 排序靠前的歌一定落在可视区域里，轻点才点得到。
 const FIXTURE_SONG := "user://chart/__self_check_a_song__"
+## 另一首读得出来的歌：换歌、移动用它（它没有成绩、也没有单曲延迟）。
+const FIXTURE_SPARE := "user://chart/__self_check_ac_spare__"
+## 读不出来的歌：有谱面文件，但内容不是 JSON。库里它仍然算歌，只是点开报读取失败。
+const FIXTURE_BROKEN := "user://chart/__self_check_ab_broken__"
 const FIXTURE_FILLER := "user://chart/__self_check_b_filler_%02d__"
 const FIXTURE_PIXELS := "user://chart/__self_check_pixels__"
 ## 一目录多谱面的夹具：同一个文件夹里放 chart.json（默认）与 extra.json（第二张谱面）。
@@ -116,6 +124,8 @@ func _ready() -> void:
 	_check_event_boundaries()
 	_check_storage()
 	_check_import_roundtrip()
+	_check_library_folders()
+	_check_bundle_import()
 	_check_takana_import()
 	_check_takana_multi()
 	_check_offset()
@@ -125,6 +135,7 @@ func _ready() -> void:
 	await _check_draw_probe()
 	await _check_stage_pixels()
 	await _check_offset_display_pixels()
+	await _check_progress_pixels()
 	await _check_note_overflow()
 	await _check_hold_slices_and_lane_layers()
 	await _check_scenes()
@@ -959,6 +970,156 @@ func _check_import_roundtrip() -> void:
 	_remove_tree(source)
 
 
+# ---------------------------------------------------------------- 谱面库的文件夹
+
+## 歌曲分组就是谱面库里的真实目录：目录表（歌 / 文件夹）、新建、移动（含安全边界），
+## 以及「成绩与单曲延迟按文件夹名记」这条性质在挪位置之后依然成立。
+func _check_library_folders() -> void:
+	var pack := "user://chart/__self_check_pack__"
+	var audio_only := "user://chart/__self_check_audio__"
+	var made := "user://chart/__self_check_new__"
+	var second := "user://chart/__self_check_new__ (2)"
+	for path in [pack, audio_only, made, second]:
+		_remove_tree(path)
+	_write_song_fixture(pack.path_join("alpha"), SONG_CHART, FIXTURE_ART)
+	_write_song_fixture(pack.path_join("beta"), SONG_CHART, FIXTURE_ART)
+	_write_song_fixture(pack.path_join("loose"), SONG_CHART, FIXTURE_ART)
+	DirAccess.make_dir_recursive_absolute(audio_only)
+	Storage.write_bytes(audio_only.path_join("tone.wav"), _make_wav())
+	# 分类只看文件名，所以刷新列表（每敲一个字都要跑一次）不必解析任何谱面。
+	_expect(not ImportAPI.is_song_folder(pack), "文件夹：装着歌的目录算文件夹，不算歌")
+	_expect(ImportAPI.is_song_folder(pack.path_join("alpha")), "文件夹：目录里有谱面 JSON 就是一首歌")
+	_expect(not ImportAPI.is_song_folder(audio_only), "文件夹：只有音频的目录不是歌")
+	# 目录表：文件夹自己报出下面有几首歌，它的内容紧跟其后、层级 +1。
+	var catalog := ImportAPI.library_catalog()
+	var index := _catalog_index(catalog, pack)
+	_expect(index >= 0 and str(catalog[index].kind) == "folder", "目录表：文件夹是一种条目")
+	var songs := int(catalog[index].get("songs", -1)) if index >= 0 else -1
+	_expect(songs == 3, "目录表：文件夹报出下面有几首歌（实际 %s）" % songs)
+	if index >= 0:
+		var nested := catalog.slice(index + 1, index + 4)
+		var kinds := PackedStringArray()
+		for entry in nested:
+			kinds.append(str(entry.kind))
+		_expect(kinds == PackedStringArray(["song", "song", "song"]), "目录表：文件夹里的歌紧跟在它后面（%s）" % ", ".join(kinds))
+		_expect(int(nested[0].get("depth", -1)) == int(catalog[index].depth) + 1, "目录表：子项比父文件夹深一级")
+	_expect(_catalog_index(catalog, pack.path_join("alpha")) >= 0, "目录表：歌也在表里")
+	_expect(ImportAPI.songs_under(pack).size() == 3, "文件夹：数得出一共有几首歌")
+	_expect(ImportAPI.songs_under(pack, true).size() == 3, "文件夹：文件夹自己不是歌，include_self 也不多算")
+	var self_only := ImportAPI.songs_under(pack.path_join("alpha"), true)
+	_expect(self_only.size() == 1 and self_only[0] == pack.path_join("alpha"), "文件夹：一首歌自己就是那一首")
+	# 新建：建在库根目录下，重名自动改名；空名字、库外、带 .. 的一律拒绝。
+	var created := Storage.create_folder("", "__self_check_new__")
+	_expect(created == made and DirAccess.dir_exists_absolute(created), "文件夹：可以在谱面库根目录新建（%s）" % Storage.last_error)
+	var duplicate := Storage.create_folder("", "__self_check_new__")
+	_expect(duplicate == second and DirAccess.dir_exists_absolute(duplicate),
+		"文件夹：重名的新建自动改成「(2)」（%s）" % Storage.display_name(duplicate))
+	_expect(Storage.create_folder("", "   ").is_empty() and not Storage.last_error.is_empty(), "文件夹：空名字的新建被拒绝")
+	_expect(Storage.create_folder("user://", "x").is_empty() and not Storage.last_error.is_empty(), "文件夹：库外的新建被拒绝")
+	_expect(Storage.create_folder("user://chart/..", "x").is_empty() and not Storage.last_error.is_empty(), "文件夹：带 .. 的新建被拒绝")
+	# 空目录也算文件夹，所以刚建完的空文件夹马上就能在列表里看见。
+	var fresh := ImportAPI.library_catalog()
+	var fresh_index := _catalog_index(fresh, made)
+	_expect(fresh_index >= 0 and str(fresh[fresh_index].kind) == "folder" and int(fresh[fresh_index].songs) == 0,
+		"目录表：新建的空文件夹也在表里，标成空文件夹")
+	# 移动：成绩与单曲延迟按文件夹名记，所以带着走。
+	Setting.set_song_offset(pack.path_join("loose"), 260.0)
+	Scores.record(pack.path_join("loose"), {"score": 812345, "counts": {"just+": 3}})
+	var moved := Storage.move_tree(pack.path_join("loose"), created)
+	_expect(moved == created.path_join("loose") and DirAccess.dir_exists_absolute(moved),
+		"文件夹：可以把歌挪进另一个文件夹（%s）" % Storage.last_error)
+	_expect(not DirAccess.dir_exists_absolute(pack.path_join("loose")), "文件夹：移动之后原位置不再有这首歌")
+	_expect(FileAccess.file_exists(moved.path_join("chart.json")) and FileAccess.file_exists(moved.path_join("tone.wav")),
+		"文件夹：移动把谱面与音频一起带走")
+	_expect_close(Setting.song_offset_of(moved), 260.0, "文件夹：移动不丢单曲延迟（按文件夹名记）")
+	_expect(int(Scores.best(moved).get("score", 0)) == 812345, "文件夹：移动不丢成绩（按文件夹名记）")
+	_expect(Storage.move_tree(pack.path_join("alpha"), pack) == pack.path_join("alpha"), "文件夹：本来就在里面的歌原地不动")
+	_expect(Storage.move_tree(pack, pack.path_join("alpha")).is_empty() and not Storage.last_error.is_empty(),
+		"文件夹：不能把文件夹挪进它自己里面")
+	_expect(Storage.move_tree(created, "user://").is_empty() and not Storage.last_error.is_empty(), "文件夹：不能挪到谱面库外面")
+	# 挪到库根目录（into 为空 = 库根），再挪回文件夹。路径名不写死：重名时 Storage 会加「(2)」。
+	var root_loose := Storage.move_tree(moved, "")
+	_expect(root_loose.get_base_dir() == Storage.chart_dir and DirAccess.dir_exists_absolute(root_loose),
+		"文件夹：可以挪回谱面库根目录（into 为空就是库根，%s）" % Storage.last_error)
+	_expect(ImportAPI.songs_under(root_loose, true).size() == 1, "文件夹：挪回根目录之后还是一首歌")
+	var back := Storage.move_tree(root_loose, pack)
+	_expect(back == pack.path_join("loose") and DirAccess.dir_exists_absolute(back),
+		"文件夹：可以从库根再挪进文件夹（%s）" % Storage.last_error)
+	_expect(ImportAPI.songs_under(pack).size() == 3, "文件夹：挪回来之后还是那 3 首歌")
+	# 收拾干净：夹具目录，以及它们带出来的成绩与单曲延迟。
+	Scores.forget_song(back)
+	Setting.set_song_offset(back, 0.0)
+	for path in [pack, audio_only, made, second, root_loose]:
+		_remove_tree(path)
+	_expect(not DirAccess.dir_exists_absolute(made), "文件夹：删除文件夹连里面的东西一起清掉")
+
+
+# ---------------------------------------------------------------- TAKANA 曲包
+
+## 曲包 = 一个 ZIP：内层可以装着单曲包（.t3pkg，各自又是一个 ZIP），也可以是已经解开的
+## 歌曲文件夹。导入的结果与「导入一个歌曲文件夹」一致：库里多一个以曲包命名的文件夹，
+## 里面每首歌各占一个子文件夹——顺带就是把这一批歌分到了同一个文件夹里。
+func _check_bundle_import() -> void:
+	var source := "user://__self_check_bundle__"
+	var bundle_target := "user://chart/self_check_bundle"
+	var single_target := "user://chart/inner_one"
+	for path in [source, bundle_target, single_target, "user://chart/empty", "user://chart/junk"]:
+		_remove_tree(path)
+	DirAccess.make_dir_recursive_absolute(source)
+	# 两个单曲包：各自是一个 ZIP，里面是一首完整的歌（谱面 + 音频 + 封面）。
+	var one := source.path_join("inner_one.t3pkg")
+	var two := source.path_join("inner_two.t3pkg")
+	_expect(_write_song_zip(one) and _write_song_zip(two), "曲包：夹具单曲包写得出来（%s）" % _zip_error)
+	# 曲包自己：两个单曲包 + 一个已经解开的歌曲文件夹，外面还套了一层目录（ZIP 常见）。
+	var bundle := source.path_join("self_check_bundle.t3bundle")
+	_expect(_write_zip(bundle, {
+		"pack/inner_one.t3pkg": _read_optional(one),
+		"pack/inner_two.t3pkg": _read_optional(two),
+		"pack/Loose/chart.json": SONG_CHART,
+		"pack/Loose/tone.wav": _make_wav(),
+		"pack/Loose/bg.png": _make_png(FIXTURE_ART),
+	}), "曲包：夹具曲包写得出来（%s）" % _zip_error)
+	var target := ImportAPI.import_bundle(bundle)
+	_expect(target == bundle_target, "曲包：导入后在库里建出以曲包命名的文件夹（%s）" % (ImportAPI.last_error if target.is_empty() else target))
+	if target.is_empty():
+		_remove_tree(source)
+		return
+	_expect(not DirAccess.dir_exists_absolute(target.path_join("pack")), "曲包：压缩包外面那层目录被抹平")
+	_expect(ImportAPI.songs_under(target).size() == 3, "曲包：一次导入带进来 3 首歌（实际 %d）" % ImportAPI.songs_under(target).size())
+	# 内层单曲包解开成同名的子文件夹，包本身不再留下。
+	_expect(DirAccess.dir_exists_absolute(target.path_join("inner_one")), "曲包：内层单曲包解开成同名的子文件夹")
+	_expect(not FileAccess.file_exists(target.path_join("inner_one.t3pkg")), "曲包：解开之后不再留下 .t3pkg 文件")
+	_expect(ImportAPI.is_song_folder(target.path_join("inner_one")), "曲包：解开出来的子文件夹就是一首歌")
+	_expect(ImportAPI.list_charts(target.path_join("inner_one")).size() == 1, "曲包：解开出来的歌能读出谱面")
+	# 已经解开的歌曲文件夹原样保留（散装歌与单曲包可以混在一个曲包里）。
+	_expect(DirAccess.dir_exists_absolute(target.path_join("Loose")) and FileAccess.file_exists(target.path_join("Loose").path_join("tone.wav")),
+		"曲包：已经解开的歌曲文件夹原样保留")
+	# 没有谱面的包（空包 / 坏包 / 认不出的扩展名）：报错可读，且不在库里留空文件夹。
+	var empty_bundle := source.path_join("empty.t3bundle")
+	_write_zip(empty_bundle, {"readme.txt": "这里面没有歌"})
+	_expect(ImportAPI.import_bundle(empty_bundle).is_empty() and not ImportAPI.last_error.is_empty(),
+		"曲包：没有谱面的曲包报错可读（%s）" % ImportAPI.last_error)
+	_expect(not DirAccess.dir_exists_absolute("user://chart/empty"), "曲包：空包导入失败后不留空文件夹")
+	var junk := source.path_join("junk.t3bundle")
+	Storage.write_bytes(junk, "这不是压缩包".to_utf8_buffer())
+	_expect(ImportAPI.import_bundle(junk).is_empty() and not ImportAPI.last_error.is_empty(), "曲包：损坏的曲包报错可读")
+	_expect(not DirAccess.dir_exists_absolute("user://chart/junk"), "曲包：坏包导入失败后不留空文件夹")
+	_expect(ImportAPI.import_bundle(source.path_join("notes.txt")).is_empty() and not ImportAPI.last_error.is_empty(),
+		"曲包：不是曲包的文件被拒绝")
+	# 单曲包单独导入：它自己就是那首歌，解出来直接铺在这个文件夹里。
+	var single := ImportAPI.import_bundle(one)
+	_expect(single == single_target and ImportAPI.is_song_folder(single),
+		"曲包：.t3pkg 单独导入就是一首歌（%s）" % (ImportAPI.last_error if single.is_empty() else single))
+	_expect(ImportAPI.list_charts(single).size() == 1, "曲包：单独导入的单曲包能读出谱面")
+	# 曲包文件夹在目录表里就是一个装着 3 首歌的文件夹。
+	var catalog := ImportAPI.library_catalog()
+	var index := _catalog_index(catalog, bundle_target)
+	_expect(index >= 0 and str(catalog[index].kind) == "folder" and int(catalog[index].songs) == 3,
+		"曲包：曲包文件夹在目录表里报出 3 首歌")
+	for path in [source, bundle_target, single_target]:
+		_remove_tree(path)
+
+
 # ---------------------------------------------------------------- TAKANA 谱面导入
 
 ## 文件夹式的 TAKANA 谱面：既没有 dakumi.bundle.json，谱面也不叫 chart.json，
@@ -1676,6 +1837,93 @@ func _check_offset_display_pixels() -> void:
 	Setting.reset_layout()
 
 
+## 进度条：游玩界面最上面一条白线，按谱面时钟从左到右伸长。
+## 比例是纯算术（自检直接喂时刻），像素部分核对三件事：
+## 贴着最上面几行、从最左边开始长、没走到的地方只剩压暗的底。
+func _check_progress_pixels() -> void:
+	if DisplayServer.get_name() == "headless":
+		_note("进度条像素检查：headless 没有渲染帧，跳过")
+		return
+	if ChartLoader.chart_data == null and not ChartLoader.readChart():
+		_note("进度条像素检查：没有可用的谱面，跳过")
+		return
+	var field := Playfield.new()
+	add_child(field)
+	field.configure(get_viewport().get_visible_rect().size)
+	# 用真实的会话：比例读的就是判定用的那个谱面时钟，不另起一套。
+	var session := PlaySession.new(ChartLoader.chart_data)
+	field.attach_session(session)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var span := session.end_time
+	_expect(span > 0.0, "进度条：谱面有时长可以算比例（%.2f 秒）" % span)
+	session.time = span * 0.5
+	_expect_close(field.progress_ratio(), 0.5, "进度条：走了一半就是一半")
+	session.time = span * 2.0
+	_expect_close(field.progress_ratio(), 1.0, "进度条：过了末尾也不再伸长")
+	session.time = -span
+	_expect_close(field.progress_ratio(), 0.0, "进度条：还没开始时是空的")
+	var image := get_viewport().get_texture().get_image()
+	var transform := get_viewport().get_final_transform()
+	var screen := get_viewport().get_visible_rect().size
+	var scale := maxf(transform.get_scale().x, 1.0)
+	var row := int(roundf((transform * Vector2(0.0, 1.0)).y))
+	# 游玩区域在画面顶端收在中间：它两侧各是一条只有背景的空白竖条（侧线之外）。
+	# 进度条与背景的边界就在那里量，量到的只可能是“有没有走到的进度条”，不会被轨道层的内容干扰。
+	var top_u: float = field.geometry.row_offset_for_screen(1.0)
+	var edge: float = _field_column(field, field.geometry.side_line_rect(0.0).position.x, top_u)
+	var blank := (transform * Vector2(edge, 0.0)).x
+	_expect(blank > 140.0, "进度条：游玩区域左侧的空白够宽，可以量进度条（左缘 x=%.0f）" % blank)
+	var inside := int(roundf(blank * 0.5))
+	# 右端的采样点取右侧空白竖条的中点：那里一定在游玩区域之外，也一定在屏幕里。
+	var right: float = _field_column(field, field.geometry.side_line_rect(1.0).end.x, top_u)
+	var outside := int(roundf(((transform * Vector2(right, 0.0)).x + screen.x) * 0.5))
+	await RenderingServer.frame_post_draw
+	image = get_viewport().get_texture().get_image()
+	# 没走到：整条只有压暗的底，连最上面几行都不该亮。
+	var dark := image.get_pixel(inside, row).r
+	_expect(dark < 0.5, "进度条：还没走到的部分只是压暗的底（红通道 %.2f）" % dark)
+	# 走到一点点：白线右端 = 比例 × 屏宽。比例取得小，右端都落在左侧空白竖条里，量的只有进度条。
+	for ratio in [0.01, 0.05, 0.08]:
+		session.time = span * float(ratio)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		image = get_viewport().get_texture().get_image()
+		_expect_near(float(_row_run(image, row, 0, int(blank) - 1).y) + 0.5, screen.x * float(ratio) * scale,
+			maxf(3.0, 3.0 * scale), "进度条：白线右端 = 已游玩比例 × 屏宽（%.0f%%）" % (float(ratio) * 100.0))
+	# 走过四分之一：左侧竖条里那一段是亮白的，右端之外（屏幕最右侧）还是压暗的底。
+	session.time = span * 0.25
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	image = get_viewport().get_texture().get_image()
+	_expect(image.get_pixel(inside, row).r > 0.85, "进度条：走过的部分是亮白（红通道 %.2f）" % image.get_pixel(inside, row).r)
+	_expect(image.get_pixel(outside, row).r < 0.5, "进度条：白线右端之外还是压暗的底（红通道 %.2f）" % image.get_pixel(outside, row).r)
+	# 贴着屏幕最上面一行：从第 0 行开始的一条横线，量得到高度。
+	var column := int(roundf((transform * Vector2(1.0, 0.0)).x))
+	var bar := _column_run(image, column, 0, int(roundf(12.0 * scale)))
+	_expect_near(bar.x, 0.0, 1.0, "进度条：贴着屏幕最上面一行（顶边 y=%.0f）" % bar.x)
+	_expect_near(bar.y - bar.x + 1.0, Playfield.PROGRESS_HEIGHT * scale, maxf(2.0, 2.0 * scale), "进度条：白线高度是 %d 像素" % int(Playfield.PROGRESS_HEIGHT))
+	# 走完整首：整条顶边都是白的（包括游玩区域上方）。
+	session.time = span
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	image = get_viewport().get_texture().get_image()
+	var full := _row_run(image, row, 0, image.get_width() - 2)
+	_expect_near(full.y + 0.5, float(image.get_width() - 2), maxf(3.0, 3.0 * scale), "进度条：走完整首时铺满整条顶边（右端 x=%.0f）" % full.y)
+	field.queue_free()
+	await get_tree().process_frame
+
+
+## 轨道层里的一列经横向收敛后落在画面的哪一列（与 StageProbe.screen_x 同一套算法）。
+## 探针类的那个版本只服务 3D 舞台探针，这里是正式 Playfield 上的等价算法。
+func _field_column(field: Playfield, field_x: float, u: float) -> float:
+	var half := field.geometry.size.x * 0.5
+	return half + (field_x - half) * field.geometry.row_scale(u)
+
+
 ## 取“轨道层里某个画布 x、某条设计行”在画面上的实际颜色：先按透视把 x 折到屏幕上。
 func _sample_row(image: Image, transform: Transform2D, geometry: PlayfieldGeometry, probe: Playfield, field_x: float, design_row: float) -> Color:
 	var u := geometry.row_offset_for_screen(design_row)
@@ -2032,8 +2280,17 @@ func _check_scenes() -> void:
 	# 上抛给根节点；轻点选中走的仍是引擎生成的模拟鼠标事件。
 	# 用一批夹具文件夹把列表撑高，再放进固定尺寸的宿主里，量“拖动滚动 + 轻点读取”。
 	_write_song_fixture(FIXTURE_SONG, SONG_CHART, FIXTURE_ART)
-	for index in 13:
+	_write_song_fixture(FIXTURE_SPARE, SONG_CHART, FIXTURE_ART)
+	# 读不出来的歌：有谱面文件但内容不是 JSON。它在库里仍然算歌，点开会报读取失败。
+	_remove_tree(FIXTURE_BROKEN)
+	DirAccess.make_dir_recursive_absolute(FIXTURE_BROKEN)
+	Storage.write_bytes(FIXTURE_BROKEN.path_join("chart.json"), "{ 这不是 JSON".to_utf8_buffer())
+	for index in 11:
 		DirAccess.make_dir_recursive_absolute(FIXTURE_FILLER % index)
+	# 先当作没选中任何歌：前面的用例会在 ChartLoader 里留下选中项，不清掉的话
+	# 列表一进来就自动选中并展开那一首，行数、行序都跟着变。
+	ChartLoader.selected_folder = ""
+	ChartLoader.selected_chart = ""
 	var host := Control.new()
 	# 矮一点的宿主：谱面库一定装不下 14 行，"拖动滚动"才有意义（真机横屏也就这么高）。
 	host.size = Vector2(900, 520)
@@ -2053,8 +2310,13 @@ func _check_scenes() -> void:
 		await get_tree().process_frame
 		_expect(picker.get_item_count() == 14, "选曲：搜索框按文件夹名过滤谱面库（实际 %d 项）" % picker.get_item_count())
 		var paths: Array = select.get("_paths")
-		var row: int = paths.find(FIXTURE_SONG)
-		_expect(row == 0, "选曲：夹具谱面排在过滤结果第一行（实际第 %d 行）" % row)
+		# 夹具歌排在假文件夹前面（Godot 的自然排序把「_」排在小写字母后面，所以三首夹具歌
+		# 自己之间的顺序是 broken < spare < song），而且都在最上面几行 —— 轻点必须点在
+		# 可视区域里，列表只有十几行高，排在后面的行点不到。
+		var song_rows := [paths.find(FIXTURE_BROKEN), paths.find(FIXTURE_SPARE), paths.find(FIXTURE_SONG)]
+		_expect(song_rows.max() < 3 and _folder_row(select, FIXTURE_FILLER % 0) > song_rows.max(),
+			"选曲：夹具歌排在假文件夹前面、都在最上面几行（夹具歌行 %s / 第一个文件夹行 %d）"
+			% [str(song_rows), _folder_row(select, FIXTURE_FILLER % 0)])
 		# 一次连续手势：手指按在列表上往上拖 → 列表滚动，再往下拖 → 回到顶部（并且不越界）。
 		var bar := picker.get_v_scroll_bar() as ScrollBar
 		_expect(bar.max_value > picker.size.y, "选曲：谱面库内容比可视区域高（可滚动）")
@@ -2071,21 +2333,40 @@ func _check_scenes() -> void:
 		_push_touch(origin + Vector2(0, 120.0), false)
 		await get_tree().process_frame
 		_expect(bar.value == 0.0, "选曲：反向拖动回到顶部且不越界（value = %.0f）" % bar.value)
-		# 先点一个空文件夹（读取必然失败），再点回夹具：这样“轻点”才是唯一让状态变化的原因。
+		# 先点一首读不出来的歌（有谱面文件、内容不是 JSON），再点回夹具：
+		# 这样“轻点”才是唯一让状态变化的原因。
 		# 展开会把谱面行插进列表，ItemList 的行号不再等于 _paths 的下标，所以每次现查行号。
 		var play: Button = select.get("_play")
-		var empty_row := _song_row(select, FIXTURE_FILLER % 1)
-		_tap_item(picker, empty_row)
+		var broken_row := _song_row(select, FIXTURE_BROKEN)
+		_tap_item(picker, broken_row)
 		await get_tree().create_timer(0.25).timeout
-		_expect(picker.get_selected_items() == PackedInt32Array([_song_row(select, FIXTURE_FILLER % 1)]),
+		_expect(picker.get_selected_items() == PackedInt32Array([_song_row(select, FIXTURE_BROKEN)]),
 			"选曲：轻点可以选中条目（选中 %s）" % str(picker.get_selected_items()))
 		_expect(play.disabled, "选曲：读取失败的谱面不能开始游玩")
-		# 轻点夹具那一首：这一首展开出它的谱面行，选中的是展开出来的第一张谱面。
-		row = _song_row(select, FIXTURE_SONG)
-		_tap_item(picker, row)
+		# 文件夹行：空文件夹只是一层分组，轻点展开 / 收起，不会把它当成歌选中。
+		var folder_row := _folder_row(select, FIXTURE_FILLER % 2)
+		_expect(folder_row >= 0, "文件夹：目录行出现在列表里（行 %d）" % folder_row)
+		_expect(picker.get_item_text(folder_row).contains("空文件夹"), "文件夹：空文件夹标成「空文件夹」（%s）" % picker.get_item_text(folder_row))
+		var rows_before := picker.get_item_count()
+		_tap_item(picker, folder_row)
 		await get_tree().create_timer(0.25).timeout
-		row = _song_row(select, FIXTURE_SONG)
-		_expect(picker.get_item_count() == 15, "选曲：轻点歌曲行展开出全部谱面（实际 %d 项）" % picker.get_item_count())
+		_expect(picker.get_selected_items() == PackedInt32Array([_song_row(select, FIXTURE_BROKEN)]),
+			"文件夹：轻点文件夹行不会改变选中的歌（选中 %s）" % str(picker.get_selected_items()))
+		_expect(ChartLoader.selected_folder == FIXTURE_BROKEN, "文件夹：文件夹行不会被当成歌选中（选中文件夹仍是 %s）" % Storage.display_name(ChartLoader.selected_folder))
+		# 搜索中文件夹一律画成展开的（否则搜到的歌被折叠层藏起来就白搜了），所以这里
+		# 只能查展开状态本身；看得见的展开 / 收起在下面「移动」那一段拿非空文件夹验。
+		_expect((select.get("_expanded_folders") as Dictionary).has(FIXTURE_FILLER % 2),
+			"文件夹：轻点展开它（展开集合 %s）" % str((select.get("_expanded_folders") as Dictionary).keys()))
+		_expect(picker.get_item_count() == rows_before, "文件夹：空文件夹展开也不会多出行（%d 项没变）" % picker.get_item_count())
+		_tap_item(picker, folder_row)
+		await get_tree().create_timer(0.25).timeout
+		_expect(not (select.get("_expanded_folders") as Dictionary).has(FIXTURE_FILLER % 2),
+			"文件夹：再轻点一下收起它（展开集合 %s）" % str((select.get("_expanded_folders") as Dictionary).keys()))
+		# 轻点夹具那一首：这一首展开出它的谱面行，选中的是展开出来的第一张谱面。
+		_tap_item(picker, _song_row(select, FIXTURE_SONG))
+		await get_tree().create_timer(0.25).timeout
+		var row := _song_row(select, FIXTURE_SONG)
+		_expect(picker.get_item_count() == 15, "选曲：轻点歌曲行展开出全部谱面，同时收起上一首（14 + 1 = 15，实际 %d 项）" % picker.get_item_count())
 		_expect(picker.get_selected_items() == PackedInt32Array([row + 1]),
 			"选曲：展开后选中它的第一张谱面（选中 %s）" % str(picker.get_selected_items()))
 		_expect(picker.get_item_text(row + 1).contains("●"),
@@ -2113,7 +2394,7 @@ func _check_scenes() -> void:
 			_expect(song_readout.text.begins_with(UI.offset_breakdown(220.0, Setting.offset, Setting.chart_offset, ChartLoader.chart_data.offset)),
 				"选曲：读数把这首的单曲延迟一起算进去（%s）" % song_readout.text)
 			# 换一首歌：显示的是那一首的数值（0），夹具那首不受影响。
-			_tap_item(picker, _song_row(select, FIXTURE_FILLER % 1))
+			_tap_item(picker, _song_row(select, FIXTURE_SPARE))
 			await get_tree().create_timer(0.25).timeout
 			_expect_close(song_box.value, 0.0, "选曲：换歌显示那一首各自的单曲延迟")
 			_expect_close(Setting.song_offset_of(FIXTURE_SONG), 220.0, "选曲：换歌不会改到别的歌的数值")
@@ -2165,7 +2446,7 @@ func _check_scenes() -> void:
 			_expect((_find_tag(select, "song:score_hint", "Label") as Label).text.is_empty(),
 				"选曲：当前模式下的成绩不再多嘴提示")
 			# 换歌：那一首没有成绩，面板回到占位符；切回来成绩还在。
-			_tap_item(picker, _song_row(select, FIXTURE_FILLER % 1))
+			_tap_item(picker, _song_row(select, FIXTURE_SPARE))
 			await get_tree().create_timer(0.25).timeout
 			_expect(score_label.text == "-------", "选曲：换到没打过的歌显示没有成绩")
 			_tap_item(picker, _song_row(select, FIXTURE_SONG))
@@ -2194,10 +2475,97 @@ func _check_scenes() -> void:
 			select.call("_sync_score")
 			var back_hint := (_find_tag(select, "song:score_hint", "Label") as Label).text
 			_expect(back_hint.is_empty(), "选曲：模式换回来就不提示了（实际「%s」）" % back_hint)
+		# ---- 文件夹：新建 / 移动 / 删除整条链路都在界面上走一遍 ----
+		# 工具栏上的「文件夹 ▾」：新建、移动到、删除文件夹三件事都在菜单里。
+		var folders_button := select.get("_folders") as Button
+		_expect(folders_button != null and folders_button.name == "FolderMenu", "文件夹：工具栏上有「文件夹」菜单")
+		if folders_button != null:
+			folders_button.emit_signal("pressed")
+			await get_tree().process_frame
+			var folder_menu := select.find_child("FolderMenuPopup", true, false) as PopupMenu
+			_expect(folder_menu != null and folder_menu.item_count == 3,
+				"文件夹：菜单有新建 / 移动到 / 删除三项（实际 %d 项）" % (folder_menu.item_count if folder_menu != null else -1))
+			if folder_menu != null:
+				_expect(folder_menu.get_item_text(0).contains("新建文件夹"), "文件夹：第一项是新建文件夹（%s）" % folder_menu.get_item_text(0))
+				_expect(folder_menu.get_item_text(1).contains("移动到"), "文件夹：第二项是移动到（%s）" % folder_menu.get_item_text(1))
+				_expect(not folder_menu.is_item_disabled(1), "文件夹：有选中的歌时「移动到…」可用")
+				_expect(folder_menu.is_item_disabled(2), "文件夹：高亮的是歌行时不能删文件夹")
+				var move_menu := select.find_child("FolderMoveMenu", true, false) as PopupMenu
+				_expect(move_menu != null and move_menu.item_count >= 2,
+					"文件夹：「移动到…」列出可以挪进去的文件夹（%d 项）" % (move_menu.item_count if move_menu != null else -1))
+				folder_menu.queue_free()
+			await get_tree().process_frame
+		# 新建文件夹：对话框里输入名字，确认后出现在列表里，搜索词也清掉（否则新文件夹看不见）。
+		select.call("_ask_new_folder")
+		await get_tree().process_frame
+		var new_dialog := select.find_child("NewFolderDialog", true, false) as ConfirmationDialog
+		_expect(new_dialog != null and new_dialog.title == "新建文件夹", "文件夹：新建时弹出输入框")
+		if new_dialog != null:
+			var edits := new_dialog.find_children("*", "LineEdit", true, false)
+			var edit: LineEdit = edits[0] if not edits.is_empty() else null
+			_expect(edit != null, "文件夹：新建对话框里有名字输入框")
+			if edit != null:
+				edit.text = "__self_check_made__"
+			new_dialog.get_ok_button().emit_signal("pressed")
+			await get_tree().process_frame
+			await get_tree().create_timer(0.25).timeout
+			_expect(DirAccess.dir_exists_absolute("user://chart/__self_check_made__"), "文件夹：确认后真的建出文件夹")
+			_expect(_folder_row(select, "user://chart/__self_check_made__") >= 0, "文件夹：新建的文件夹出现在列表里")
+			_expect((select.get("_search") as LineEdit).text.is_empty(), "文件夹：新建后清掉搜索词，好让新文件夹看得见")
+		# 移动：把夹具歌挪进新建的文件夹，列表跟着重排，成绩与单曲延迟都还在。
+		Scores.record(FIXTURE_SPARE, {"score": 456789, "counts": {"just+": 5}})
+		Setting.set_song_offset(FIXTURE_SPARE, 120.0)
+		var into := "user://chart/__self_check_made__"
+		var moved := into.path_join(Storage.display_name(FIXTURE_SPARE))
+		select.call("_move_into", FIXTURE_SPARE, into)
+		await get_tree().process_frame
+		await get_tree().create_timer(0.25).timeout
+		_expect(DirAccess.dir_exists_absolute(moved) and not DirAccess.dir_exists_absolute(FIXTURE_SPARE),
+			"文件夹：界面里的「移动」把歌挪进文件夹（%s）" % Storage.last_error)
+		_expect(_song_row(select, moved) >= 0, "文件夹：移动后的歌出现在新文件夹下")
+		_expect(int(Scores.best(moved).get("score", 0)) == 456789, "文件夹：移动后成绩还在（按文件夹名记）")
+		_expect_close(Setting.song_offset_of(moved), 120.0, "文件夹：移动后单曲延迟还在（按文件夹名记）")
+		# 展开 / 收起：这个文件夹里有歌了，轻点一下歌行跟着消失、再点一下回来。
+		var carried_rows := picker.get_item_count()
+		_expect(_folder_row(select, into) >= 0, "文件夹：移动后的歌所在的文件夹也在列表里（行 %d）" % _folder_row(select, into))
+		_tap_item(picker, _folder_row(select, into))
+		await get_tree().create_timer(0.25).timeout
+		_expect(picker.get_item_count() == carried_rows - 1 and _song_row(select, moved) < 0,
+			"文件夹：轻点收起文件夹，里面的歌不再占行（%d → %d）" % [carried_rows, picker.get_item_count()])
+		_tap_item(picker, _folder_row(select, into))
+		await get_tree().create_timer(0.25).timeout
+		_expect(picker.get_item_count() == carried_rows and _song_row(select, moved) >= 0,
+			"文件夹：再轻点展开，里面的歌重新出现（实际 %d 项）" % picker.get_item_count())
+		# 删除文件夹：二次确认写清里面有几首歌，确认后连成绩与单曲延迟一起清掉。
+		select.call("_ask_delete_folder", into, "__self_check_made__")
+		await get_tree().process_frame
+		var folder_confirm := select.find_child("DeleteConfirm", true, false) as ConfirmationDialog
+		_expect(folder_confirm != null and folder_confirm.dialog_text.contains("1 首歌"),
+			"文件夹：删文件夹的确认框写明里面有几首歌")
+		if folder_confirm != null:
+			folder_confirm.get_cancel_button().emit_signal("pressed")
+		await get_tree().process_frame
+		_expect(DirAccess.dir_exists_absolute(moved), "文件夹：点取消什么都不删")
+		select.call("_ask_delete_folder", into, "__self_check_made__")
+		await get_tree().process_frame
+		folder_confirm = select.find_child("DeleteConfirm", true, false) as ConfirmationDialog
+		if folder_confirm != null:
+			folder_confirm.get_ok_button().emit_signal("pressed")
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_expect(not DirAccess.dir_exists_absolute(into), "文件夹：确认后整个文件夹被删掉")
+		_expect(int(Scores.best(moved).get("score", 0)) == 0, "文件夹：里面的歌的成绩一起清掉")
+		_expect_close(Setting.song_offset_of(moved), 0.0, "文件夹：里面的歌的单曲延迟一起清掉")
+		_expect(_folder_row(select, into) < 0, "文件夹：列表里不再有这个文件夹")
 	host.queue_free()
 	await get_tree().process_frame
+	Scores.forget_song(FIXTURE_SPARE)
+	Setting.set_song_offset(FIXTURE_SPARE, 0.0)
 	_remove_tree(FIXTURE_SONG)
-	for index in 13:
+	_remove_tree(FIXTURE_SPARE)
+	_remove_tree(FIXTURE_BROKEN)
+	_remove_tree("user://chart/__self_check_made__")
+	for index in 11:
 		_remove_tree(FIXTURE_FILLER % index)
 	ChartLoader.selected_folder = ""
 
@@ -2448,6 +2816,53 @@ func _read_optional(path: String) -> PackedByteArray:
 	return FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
 
 
+## 纯色 PNG（曲包夹具的封面）。
+func _make_png(color: Color) -> PackedByteArray:
+	var image := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	image.fill(color)
+	return image.save_png_to_buffer()
+
+
+## 造一个 ZIP（曲包夹具）：值是字符串就按 UTF-8 写，字节数组原样写。失败原因留在 _zip_error。
+func _write_zip(path: String, entries: Dictionary) -> bool:
+	_zip_error = ""
+	var packer := ZIPPacker.new()
+	var failure: int = packer.open(path)
+	if failure != OK:
+		_zip_error = "%s（%s）" % [error_string(failure), path]
+		return false
+	for name in entries:
+		var value: Variant = entries[name]
+		failure = packer.start_file(str(name))
+		if failure == OK:
+			var bytes: PackedByteArray = value if value is PackedByteArray else str(value).to_utf8_buffer()
+			failure = packer.write_file(bytes)
+		if failure != OK:
+			_zip_error = "%s（%s）" % [error_string(failure), str(name)]
+			packer.close()
+			return false
+		packer.close_file()
+	packer.close()
+	return true
+
+
+## 一首完整歌曲的 ZIP：当单曲包（.t3pkg）用，也可以直接塞进曲包里。
+func _write_song_zip(path: String) -> bool:
+	return _write_zip(path, {
+		"chart.json": SONG_CHART,
+		"tone.wav": _make_wav(),
+		"bg.png": _make_png(FIXTURE_ART),
+	})
+
+
+## 谱面库目录表里某个路径的下标（-1 = 表里没有它）。
+func _catalog_index(catalog: Array[Dictionary], path: String) -> int:
+	for index in catalog.size():
+		if str(catalog[index].path) == path:
+			return index
+	return -1
+
+
 ## 收集设置界面里带 dakumi_setting 标签的控件（含滑条）。
 func _collect_tags(node: Node, found: Dictionary) -> void:
 	if node.has_meta("dakumi_setting"):
@@ -2541,8 +2956,30 @@ func _song_row(select: Node, folder: String) -> int:
 	return -1
 
 
+## 选曲列表里某个文件夹行的行号（-1 = 列表里没有它）。
+func _folder_row(select: Node, folder: String) -> int:
+	var rows: Array = select.get("_rows")
+	for index in rows.size():
+		var row: Dictionary = rows[index]
+		if str(row.kind) == "folder" and str(row.folder) == folder:
+			return index
+	return -1
+
+
+## 轻点列表里的某一行。行在可视区域外时先把它滚进视野再点：轻点必须落在列表自己的矩形
+## 里，否则点到的是别的控件。滚动后要多等一帧让 ItemList 重排各行位置，所以这里是协程
+##（调用处紧接着都有 0.25 秒的等待，够它落地）。
 func _tap_item(list: ItemList, index: int) -> void:
-	var point := list.get_global_rect().position + list.get_item_rect(index).get_center()
+	# get_item_rect 给的是内容坐标、不随滚动变，所以“这一行现在画在哪”要拿滚动条现值去减。
+	var rect := list.get_item_rect(index)
+	var column := rect.position.x + rect.size.x * 0.5
+	var visible := rect.get_center().y
+	if rect.end.y > list.size.y or rect.position.y < 0.0:
+		var bar := list.get_v_scroll_bar()
+		bar.value = bar.min_value if rect.position.y < 0.0 else rect.position.y - 4.0
+		await get_tree().process_frame
+		visible -= bar.value
+	var point := list.get_global_rect().position + Vector2(column, clampf(visible, 2.0, list.size.y - 2.0))
 	_push_touch(point, true)
 	for pressed in [true, false]:
 		var event := InputEventMouseButton.new()

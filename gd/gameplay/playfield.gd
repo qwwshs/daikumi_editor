@@ -21,6 +21,13 @@ extends Node2D
 
 ## 手指按住轨道时给的一点反馈：背景更实、线更亮（不改变黑白配色）。
 const TOUCH_ALPHA_BOOST := 0.2
+## 进度条：贴着屏幕顶边的一条白线，按谱面时钟从左到右伸长，走完刚好覆盖整条顶边。
+## 只在真的有会话（正式游玩）时出现：预览与 3D 舞台自检的探针没有会话，
+## 画面顶端那几行要留给轨道内容。
+const PROGRESS_HEIGHT := 5.0
+## 已走过的部分是亮白，没走到的部分压暗当底，两种情况都能看出歌还剩多少。
+const PROGRESS_ALPHA := 0.95
+const PROGRESS_TRACK_ALPHA := 0.22
 ## 轨道层画布的分辨率上限：避免高分辨率设备上 2D 画布过大。
 const MAX_DEVICE_SCALE := 2.0
 ## 预览里上一颗音符越过判定线多久之后排下一颗（秒）。
@@ -285,13 +292,15 @@ func hit_sound_enabled(kind: String, phase: String) -> bool:
 func _process(delta: float) -> void:
 	_elapsed += delta
 	_field_layer.queue_redraw()
-	# HUD 无时间动画，仅在判定或布局/素材变化时重绘；
-	# 击打延迟显示例外：它只亮一小会儿，显示期间逐帧重绘，到点清掉后再次停手。
-	if not _offset_word.is_empty():
-		if _elapsed - _offset_start > float(Setting.layout.judge_offset_duration):
-			_offset_word = ""
-		if is_instance_valid(_hud_layer):
-			_hud_layer.queue_redraw()
+	# HUD 基本没有时间动画，仅在判定或布局/素材变化时重绘；两处例外：
+	#   · 击打延迟显示只亮一小会儿，显示期间逐帧重绘，到点清掉后再次停手；
+	#   · 进度条跟着谱面时钟走，有会话时就逐帧重绘。
+	if session == null and _offset_word.is_empty():
+		return
+	if not _offset_word.is_empty() and _elapsed - _offset_start > float(Setting.layout.judge_offset_duration):
+		_offset_word = ""
+	if is_instance_valid(_hud_layer):
+		_hud_layer.queue_redraw()
 
 
 ## 背景是普通 2D：单独一层铺满整个画面，不跟着轨道倾斜。
@@ -331,6 +340,26 @@ func draw_hud(canvas: CanvasItem) -> void:
 		Skins.draw_panel(canvas, "exit", Rect2(Vector2(12, 12), button_size))
 		Skins.draw_panel(canvas, "restart", Rect2(Vector2(_view_size.x - button_size.x - 12, 12), button_size))
 	_draw_numbers(canvas)
+	# 进度条画在最后：它只占顶端 5 像素，谁被摆到那上面都该让位给它。
+	_draw_progress(canvas)
+
+
+## 已游玩的比例（0 ~ 1）：拿谱面时钟比最后一颗音符的尾巴。
+## 没有会话（预览 / 舞台探针）或谱面还没有时长时是 0，等于不画。
+func progress_ratio() -> float:
+	if session == null or session.end_time <= 0.0:
+		return 0.0
+	return clampf(session.time / session.end_time, 0.0, 1.0)
+
+
+## 进度条是 HUD：不参与倾斜，直接铺在画面顶边，宽度按比例给。
+func _draw_progress(canvas: CanvasItem) -> void:
+	if session == null:
+		return
+	var track := Rect2(0.0, 0.0, _view_size.x, PROGRESS_HEIGHT)
+	canvas.draw_rect(track, Color(1, 1, 1, PROGRESS_TRACK_ALPHA))
+	canvas.draw_rect(Rect2(0.0, 0.0, _view_size.x * progress_ratio(), PROGRESS_HEIGHT),
+		Color(1, 1, 1, PROGRESS_ALPHA))
 
 
 func _draw_lane(canvas: CanvasItem, lane: Dictionary) -> void:

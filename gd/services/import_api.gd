@@ -7,6 +7,12 @@ signal plugins_changed
 const REGISTRY_PATH := "user://reader_plugins.json"
 const MANIFEST_NAME := "dakumi.bundle.json"
 const CONTEXT := preload("res://gd/services/import_context.gd")
+## 谱面文件夹里这些 JSON 不是谱面（设置、清单、读取器登记表），扫描时跳过、也不当谱面候选。
+const RESERVED_JSON: PackedStringArray = [MANIFEST_NAME, "skin.json", "manifest.json", "settings.json", "reader_plugins.json"]
+## 曲包：TAKANA 把一批歌曲打包成一个文件（bundle 是外壳 ZIP，里面的 pkg 各自也是 ZIP）。
+const BUNDLE_EXTENSIONS: PackedStringArray = ["t3bundle", "t3pkg"]
+## 库目录树最多下钻这么多层（防符号链接成环，也和导入/删除的层级上限一致）。
+const CATALOG_DEPTH := 8
 
 var last_error: String = ""
 var _plugins: Array[Dictionary] = []
@@ -207,10 +213,11 @@ func scan_folder(folder: String) -> Dictionary:
 			if result.background.is_empty():
 				result.background = entry.path
 			continue
-		var name := filename.to_lower()
-		if name in [MANIFEST_NAME, "skin.json", "manifest.json", "settings.json", "reader_plugins.json"] or name.ends_with(".t3proj") or seen.has(chart_identity(entry.path)):
-			continue
 		if extension == "json":
+			# 清单 / 皮肤 / 设置这些 JSON 不是谱面；读取器或清单已经收过的谱面也不再收一遍。
+			var name := filename.to_lower()
+			if name in RESERVED_JSON or seen.has(chart_identity(entry.path)):
+				continue
 			var value: Variant = JSON.parse_string(Storage.read_bytes(entry.path).get_string_from_utf8())
 			if not value is Dictionary or not (filename.to_lower() == "chart.json" or value.has("note") or value.has("bpm") or value.has("event")):
 				continue
@@ -310,6 +317,146 @@ func list_charts(folder: String) -> Array[Dictionary]:
 	if not root.is_empty():
 		charts.assign(root.scan.charts)
 	return charts
+
+
+# ---------------------------------------------------------------- 谱面库目录树
+
+## 谱面库的目录树，深度优先的扁平表：每个条目要么是「歌」（kind = "song"，自己这层就有谱面），
+## 要么是「文件夹」（kind = "folder"，用来给歌分组，songs 是它下面有多少首歌）。
+## folder 条目后面紧跟着它的内容，depth 是层级（0 = 库根目录下）。
+## 选曲界面按这张表排行，展开哪一层由界面自己决定；这里的判据必须便宜
+## （只见文件名，不解析内容），每次刷新都要对整棵树跑一遍。
+func library_catalog(max_depth: int = CATALOG_DEPTH) -> Array[Dictionary]:
+	var listing: Array[Dictionary] = []
+	for root in Storage.library_roots():
+		if DirAccess.dir_exists_absolute(root):
+			_append_catalog(listing, root, 0, max_depth)
+	return listing
+
+
+## 接一个目录的子项进目录表，返回它下面（不含自己）有多少首歌。
+func _append_catalog(listing: Array[Dictionary], folder: String, depth: int, max_depth: int) -> int:
+	var songs := 0
+	for entry in Storage.list_directory(folder):
+		if not entry.is_dir:
+			continue
+		if is_song_folder(entry.path):
+			listing.append({"kind": "song", "path": entry.path, "name": entry.name, "depth": depth})
+			songs += 1
+			continue
+		var index := listing.size()
+		listing.append({"kind": "folder", "path": entry.path, "name": entry.name, "depth": depth, "songs": 0})
+		var nested := _append_catalog(listing, entry.path, depth + 1, max_depth) if depth < max_depth else 0
+		listing[index]["songs"] = nested
+		songs += nested
+	return songs
+
+
+## 这个目录是「歌」还是「文件夹」：只看文件名与扩展名。
+## 判据是「像谱面」——损坏的 chart.json 也算歌，它会作为一首读不出来的歌出现在列表里
+## （点开报读取失败），而不是被当成文件夹藏起来。
+func is_song_folder(folder: String) -> bool:
+	var context := make_context("", folder)
+	for entry in Storage.list_directory(folder):
+		if entry.is_dir:
+			continue
+		var name := str(entry.name).to_lower()
+		if name == MANIFEST_NAME or name.ends_with(".t3proj"):
+			return true
+		if name.ends_with(".json") and not name in RESERVED_JSON:
+			return true
+		for registered in _readers:
+			var reader: RefCounted = registered.reader
+			if reader.has_method("can_read") and reader.call("can_read", "chart", entry.path, context):
+				return true
+	return false
+
+
+## 一个目录（include_self 时含它自己）下面所有「歌」的路径：删掉一整个文件夹时，
+## 要按这些路径逐首清掉成绩与单曲延迟。
+func songs_under(folder: String, include_self: bool = false) -> Array[String]:
+	var result: Array[String] = []
+	if include_self and is_song_folder(folder):
+		result.append(folder)
+	_collect_songs(folder, result, 0)
+	return result
+
+
+func _collect_songs(folder: String, result: Array[String], depth: int) -> void:
+	if depth > CATALOG_DEPTH:
+		return
+	for entry in Storage.list_directory(folder):
+		if not entry.is_dir:
+			continue
+		if is_song_folder(entry.path):
+			result.append(entry.path)
+		else:
+			_collect_songs(entry.path, result, depth + 1)
+
+
+# ---------------------------------------------------------------- 曲包
+
+## 导入曲包：TAKANA 的 .t3bundle 是把一批歌打成一个文件（外壳也是 ZIP），
+## 内层 .t3pkg 各自是一首歌（同样是 ZIP），内层文件夹就是已经解开的歌。
+## 结果和「导入一个歌曲文件夹」一致：库里多一个 chart/<曲包名的文件夹>/，
+## 里面每首歌各占一个子文件夹——顺带把一批歌分到了同一个文件夹里。
+## .t3pkg 单独导入时它自己就是那首歌（解出来直接铺在这个文件夹里）。
+func import_bundle(path: String) -> String:
+	last_error = ""
+	Storage.last_error = ""
+	if path.is_empty():
+		last_error = "请先选择曲包文件。"
+		return ""
+	var extension := Storage.display_name(path).get_extension().to_lower()
+	if not extension in BUNDLE_EXTENSIONS:
+		last_error = "不是曲包文件（支持 %s）：%s" % [", ".join(BUNDLE_EXTENSIONS), Storage.display_name(path)]
+		return ""
+	var target := Storage.unique_path(Storage.chart_dir, Storage._safe_name(Storage.display_name(path).get_basename()))
+	if not Storage.extract_zip(path, target):
+		last_error = Storage.last_error
+		return ""
+	_flatten_wrapper(target)
+	if extension != "t3pkg":
+		_unpack_children(target)
+	if songs_under(target, true).is_empty():
+		# 空包或整包都读不出来：整个撤掉，不在库里留一个点不开的空文件夹。
+		Storage.delete_tree(target)
+		last_error = "曲包里没有找到可读取的谱面：%s" % Storage.display_name(path)
+		return ""
+	Storage.library_changed.emit(target)
+	return target
+
+
+## 压缩包里常见「再套一层同名文件夹」：只有一层目录、没有别的文件时把它提上来，
+## 免得库里出现 chart/曲包名/曲包名/歌 这种套两层的名字。
+func _flatten_wrapper(folder: String) -> void:
+	var entries := Storage.list_directory(folder)
+	if entries.size() != 1 or not entries[0].is_dir:
+		return
+	var inner: String = entries[0].path
+	for child in Storage.list_directory(inner):
+		DirAccess.rename_absolute(child.path, folder.path_join(str(child.name)))
+	DirAccess.remove_absolute(inner)
+
+
+## 解开曲包里的内层单曲包：解到同目录下的同名文件夹，然后删掉那个包本身。
+## 解不出歌的包直接丢掉——留着它在库里也只是一行点不开的东西（源文件仍在玩家的原曲包里）。
+func _unpack_children(folder: String, depth: int = 0) -> void:
+	if depth > CATALOG_DEPTH:
+		return
+	for entry in Storage.list_directory(folder):
+		if entry.is_dir:
+			_unpack_children(entry.path, depth + 1)
+			continue
+		if not str(entry.name).to_lower().ends_with(".t3pkg"):
+			continue
+		var target := Storage.unique_path(folder, Storage._safe_name(Storage.display_name(entry.path).get_basename()))
+		if Storage.extract_zip(entry.path, target):
+			_flatten_wrapper(target)
+			if songs_under(target, true).is_empty():
+				Storage.delete_tree(target)
+		# 不论解开没有，包本身都不再需要：解出来的是它的内容，坏包留着也打不开。
+		Storage.delete_file(entry.path)
 
 
 ## Manifest paths may be relative to the folder, absolute, or independent SAF

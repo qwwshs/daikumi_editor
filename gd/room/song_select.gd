@@ -37,21 +37,31 @@ var _score_summary: Label
 var _score_hint: Label
 var _score_grid: GridContainer
 var _score_values: Dictionary = {}
+## 谱面库的目录树（ImportAPI.library_catalog）：歌与文件夹混在一起，按名字排序。
 var _entries: Array[Dictionary] = []
 ## 过滤后的歌曲文件夹（列表顺序）；列表行号不等于它的下标，见 _rows。
 var _paths: Array[String] = []
-## 列表的每一行：kind 是 "song"（歌曲）或 "chart"（选中歌曲展开出来的谱面），
+## 列表的每一行：kind 是 "folder"（文件夹）/ "song"（歌曲）/ "chart"（选中歌曲展开出来的谱面），
 ## 下标与 ItemList 的行号一一对应。
 var _rows: Array[Dictionary] = []
+## 展开的文件夹（路径 → true）：文件夹行据此显示里面的歌。
+## 搜索时命中的文件夹会被临时展开（见 _filter），但不写进这里。
+var _expanded_folders: Dictionary = {}
 ## 歌曲文件夹 → 扫描到的全部谱面（ImportAPI.list_charts 的结果）；改动库内容后整份丢掉重扫。
 var _charts: Dictionary = {}
 ## 正在删除文件：此时 Storage 广播的刷新先跳过，删完由我们统一刷新一次。
 var _deleting := false
+## 列表里当前画出了几个文件夹行（计数用）。
+var _folders_shown := 0
 ## 列表当前已经画成什么样：展开的是哪首歌、圆点标在哪张谱面。轻点同一行时用它判断要不要重排。
 var _expanded := ""
 var _marked := ""
 var _rebuild_queued := false
+## 上一次轻点处理的是哪一行、发生在哪一帧：同一次轻点会连着来两次通知，用它去重。
+var _picked_row := -1
+var _picked_frame := -1
 var _manage: Button
+var _folders: Button
 var _loaded_folder := ""
 var _loaded_chart := ""
 var _timer: Timer
@@ -101,6 +111,10 @@ func _ready() -> void:
 	_manage = UI.button(toolbar, "管理  ▾", _open_manage)
 	_manage.name = "ManageLibrary"
 	_manage.custom_minimum_size = Vector2(150, 40)
+	# 文件夹：新建 / 移动选中的歌 / 删除。歌曲的分组就是谱面库里的真实目录。
+	_folders = UI.button(toolbar, "文件夹  ▾", _open_folder_menu)
+	_folders.name = "FolderMenu"
+	_folders.custom_minimum_size = Vector2(150, 40)
 	_search = LineEdit.new()
 	_search.placeholder_text = "搜索曲名或文件夹…"
 	_search.custom_minimum_size.y = 48
@@ -303,8 +317,9 @@ func _refresh(new_path: String = "", keep_search := false) -> void:
 	if not new_path.is_empty():
 		ChartLoader.selected_folder = new_path
 		ChartLoader.selected_chart = ""
-	_entries = Storage.library_directories()
-	_entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a.name).naturalnocasecmp_to(str(b.name)) < 0)
+		# 导入的是一个曲包时，新歌在新建的文件夹里：把上级文件夹一并展开。
+		_reveal(new_path)
+	_entries = ImportAPI.library_catalog()
 	_charts.clear()
 	_loaded_folder = ""
 	_loaded_chart = ""
@@ -315,7 +330,8 @@ func _refresh(new_path: String = "", keep_search := false) -> void:
 	_filter()
 
 
-## 按搜索词重排列表：一首歌一行，当前选中（＝点开）的那首下面再列出它的全部谱面。
+## 按搜索词重排列表：文件夹与歌按目录顺序各占一行，展开的文件夹显示里面的歌，
+## 当前选中（＝点开）的那首歌下面再列出它的全部谱面。
 ## keep_scroll 保留滚动位置：轻点展开会让列表变长，不保留就会跳回顶部。
 func _filter(keep_scroll: bool = false) -> void:
 	_timer.stop()
@@ -326,30 +342,29 @@ func _filter(keep_scroll: bool = false) -> void:
 	_list.clear()
 	_rows.clear()
 	_paths.clear()
+	_folders_shown = 0
 	var selected_folder := ChartLoader.selected_folder
 	# 选中的谱面可能刚被删掉：对不上这个文件夹里的任何一张就退回默认谱面。
 	if not ChartLoader.selected_chart.is_empty() and not _has_chart(selected_folder, ChartLoader.selected_chart):
 		ChartLoader.selected_chart = ""
 	var query := _search.text.strip_edges().to_lower()
-	for entry in _entries:
-		var text := str(entry.get("title", entry.name))
-		if not query.is_empty() and not query in (text + " " + str(entry.name)).to_lower():
-			continue
-		_paths.append(entry.path)
-		_rows.append({"kind": "song", "folder": entry.path})
-		_list.add_item(("▾ " if entry.path == selected_folder else "▸ ") + text)
-		if entry.path == selected_folder:
-			_append_charts(entry.path)
-			_expanded = entry.path
-			_marked = ChartLoader.selected_chart
-	_count.text = ("匹配 %d 首歌" if not query.is_empty() else "共 %d 首歌 · 轻点展开全部谱面") % _paths.size()
+	# 搜索时命中的文件夹一律展开：不然命中项藏在自己收起的文件夹里，等于没搜到。
+	_append_nodes(_catalog_tree(), query, not query.is_empty())
+	# 搜索时不提文件夹数：命中的文件夹一律画成展开的，数量没有意义。
+	if query.is_empty():
+		_count.text = "共 %d 首歌 · %d 个文件夹 · 轻点展开" % [_paths.size(), _folders_shown]
+	else:
+		_count.text = "匹配 %d 首歌" % _paths.size()
 	if _paths.is_empty():
-		_list.add_item("暂无谱面 · 点击上方导入" if _entries.is_empty() else "没有匹配的谱面")
-		_list.set_item_disabled(0, true)
+		var hint := "暂无谱面 · 点击上方导入"
+		if not _entries.is_empty():
+			hint = "没有匹配的谱面" if not query.is_empty() else "轻点文件夹展开里面的歌"
+		_list.add_item(hint)
+		_list.set_item_disabled(_list.get_item_count() - 1, true)
 		_play.disabled = true
 		_art.texture = null
 		_title.text = "导入你的第一首歌" if _entries.is_empty() else "换个关键词试试"
-		_credits.text = "支持 ZIP 压缩包和谱面文件夹"
+		_credits.text = "支持 ZIP 压缩包、谱面文件夹与 TAKANA 曲包"
 		_difficulty.text = "DAKUMI"
 		_details.text = ""
 		_status.text = Storage.status_message
@@ -359,7 +374,18 @@ func _filter(keep_scroll: bool = false) -> void:
 		_sync_offset()
 		_sync_score()
 		return
-	var index := maxi(0, _row_of_selection())
+	var index := _row_of_selection()
+	if index < 0 and (not query.is_empty() or ChartLoader.selected_folder.is_empty()):
+		# 列表里没有选中项的那一行时，退到第一行：搜索之后卡片里给第一个匹配，
+		# 第一次进选曲界面时给第一首歌——两种情况下卡片都不能空着。
+		index = 0
+	if index < 0:
+		# 选中的那首歌收在折叠的文件夹里：不动选中项（它还是这首），只是列表里没有它那一行。
+		_list.set_block_signals(true)
+		_list.deselect_all()
+		_list.set_block_signals(false)
+		_status.text = "选中的歌在折叠的文件夹里：展开它，或另选一首。"
+		return
 	_list.set_block_signals(true)
 	_list.select(index)
 	_list.set_block_signals(false)
@@ -368,19 +394,87 @@ func _filter(keep_scroll: bool = false) -> void:
 		_list.get_v_scroll_bar().value = scroll
 
 
+## 谱面库的目录树（扁平表 → 嵌套结构），排行时用。
+## 扁平表是深度优先的，所以某一层的父节点一定在它的子项之前出现过。
+func _catalog_tree() -> Array[Dictionary]:
+	var roots: Array[Dictionary] = []
+	var level: Array = []
+	for entry in _entries:
+		var node := {"kind": str(entry.kind), "path": str(entry.path), "name": str(entry.name),
+			"songs": int(entry.get("songs", 0)), "depth": int(entry.depth), "children": []}
+		var depth := int(entry.depth)
+		level.resize(depth)
+		var bucket: Array = level[depth - 1] if depth > 0 else roots
+		bucket.append(node)
+		level.append(node.children)
+	return roots
+
+
+## 排行：文件夹行、展开时它里面的内容；歌行按选中状态展开它的谱面。
+## forced_open 为真（搜索中）时所有显示出来的文件夹都展开。
+func _append_nodes(nodes: Array, query: String, forced_open: bool) -> void:
+	for node in nodes:
+		if not query.is_empty() and not _node_matches(node, query):
+			continue
+		if str(node.kind) != "folder":
+			_append_song(node)
+			continue
+		var path := str(node.path)
+		var open := forced_open or _expanded_folders.has(path)
+		_append_folder(node, open)
+		if open:
+			_append_nodes(node.children, query, forced_open)
+
+
+## 搜索时这一项要不要留下：歌看自己的名字，文件夹看自己或它下面的任何一首歌。
+func _node_matches(node: Dictionary, query: String) -> bool:
+	if str(node.kind) != "folder":
+		return query in str(node.name).to_lower()
+	if query in str(node.name).to_lower():
+		return true
+	for child in node.children:
+		if _node_matches(child, query):
+			return true
+	return false
+
+
+func _append_folder(node: Dictionary, open: bool) -> void:
+	var path := str(node.path)
+	_folders_shown += 1
+	_rows.append({"kind": "folder", "folder": path, "name": str(node.name)})
+	var note := "%d 首歌" % int(node.songs) if int(node.songs) > 0 else "空文件夹"
+	_list.add_item("%s%s%s   · %s" % [_indent(int(node.depth) + 1), "▾" if open else "▸", str(node.name), note])
+
+
+func _append_song(node: Dictionary) -> void:
+	var path := str(node.path)
+	_paths.append(path)
+	_rows.append({"kind": "song", "folder": path})
+	_list.add_item("%s%s %s" % [_indent(int(node.depth)), "▾" if path == ChartLoader.selected_folder else "▸", str(node.name)])
+	if path == ChartLoader.selected_folder:
+		_append_charts(path, int(node.depth) + 1)
+		_expanded = path
+		_marked = ChartLoader.selected_chart
+
+
+## 层级缩进：文件夹与歌都用它，展开出来的谱面再多缩进一级（见 _append_charts）。
+static func _indent(depth: int) -> String:
+	return "      ".repeat(maxi(0, depth))
+
+
 ## 把一首歌的全部谱面作为子行接在它后面。扫描为空时留一行说明（空文件夹在自检里就是这么用的），
 ## 免得点开之后看上去什么都没发生。当前要游玩的那张用 ● 标出来。
-func _append_charts(folder: String) -> void:
+func _append_charts(folder: String, depth: int = 1) -> void:
 	var charts := _charts_of(folder)
 	if charts.is_empty():
 		_rows.append({"kind": "note", "folder": folder})
-		_list.add_item("      没有找到可读取的谱面")
+		_list.add_item(_indent(depth) + "没有找到可读取的谱面")
 		_list.set_item_disabled(_rows.size() - 1, true)
 		return
 	for chart in charts:
 		var path := str(chart.chart)
 		_rows.append({"kind": "chart", "folder": folder, "chart": path})
-		_list.add_item("      %s %s" % ["●" if path == ChartLoader.selected_chart else "○", _chart_text(chart)])
+		_list.add_item("%s%s %s" % [_indent(depth), "●" if path == ChartLoader.selected_chart else "○", _chart_text(chart)])
 
 
 ## 一个文件夹里的全部谱面，带缓存：扫描要读目录里的每个 JSON，切歌、搜索时不该反复做。
@@ -429,10 +523,35 @@ func _row_of_selection() -> int:
 ## 轻点一行：选中它；选中的歌展开成全部谱面，选中的谱面成为要游玩的那张。
 ## 展开要重排列表，而重排不能在 ItemList 发信号的过程中做，所以放到本帧末尾。
 func _item_picked(index: int) -> void:
+	if index < 0 or index >= _rows.size():
+		return
+	# 同一次轻点会连着来两次通知（两个信号都听了，见 _ready），同一帧里同一行只处理一次：
+	# 否则文件夹会被连着切两下，展开 / 收起等于没反应。
+	var frame := Engine.get_process_frames()
+	if index == _picked_row and frame == _picked_frame:
+		return
+	_picked_row = index
+	_picked_frame = frame
+	# 文件夹行只是展开 / 收起，它不是歌，不能拿去游玩，也不改选中项。
+	if str(_rows[index].kind) == "folder":
+		_toggle_folder(str(_rows[index].folder))
+		return
 	_selected(index)
-	# 展开的那首没变、标中的谱面也没变，就不必重排
-	#（点同一行会连着来两次通知，见 _ready 里的连接）。
+	# 展开的那首没变、标中的谱面也没变，就不必重排（再点一次同一行就会走到这里）。
 	if _rebuild_queued or (ChartLoader.selected_folder == _expanded and ChartLoader.selected_chart == _marked):
+		return
+	_rebuild_queued = true
+	_filter.call_deferred(true)
+
+
+## 轻点文件夹行：展开 / 收起它里面的歌。重排不能在 ItemList 发信号的过程中做，
+## 所以同样推到本帧末尾。
+func _toggle_folder(path: String) -> void:
+	if _expanded_folders.has(path):
+		_expanded_folders.erase(path)
+	else:
+		_expanded_folders[path] = true
+	if _rebuild_queued:
 		return
 	_rebuild_queued = true
 	_filter.call_deferred(true)
@@ -605,6 +724,203 @@ func _after_delete(folder: String, message: String) -> void:
 	_charts.erase(folder)
 	_refresh("", true)
 	_status.text = message
+
+
+# ---------------------------------------------------------------- 文件夹：分组 / 移动 / 删除
+
+## 文件夹菜单：新建一个装歌的文件夹、把当前这一项挪进去、删掉一个文件夹。
+## 分组就是谱面库里的真实目录（见 ImportAPI.library_catalog），所以电脑上直接整理文件也一致。
+func _open_folder_menu() -> void:
+	var menu := PopupMenu.new()
+	menu.name = "FolderMenuPopup"
+	menu.add_item("新建文件夹…", 0)
+	var target := _move_target()
+	if target.is_empty():
+		menu.add_item("移动到…", 1)
+		menu.set_item_disabled(1, true)
+	else:
+		var move_menu := PopupMenu.new()
+		move_menu.name = "FolderMoveMenu"
+		var destinations: Array[String] = []
+		# 谱面库根目录：把歌从文件夹里拿出来（已经在根目录下就不给这一项）。
+		if str(target.path).get_base_dir().rstrip("/") != Storage.chart_dir.rstrip("/"):
+			destinations.append("")
+			move_menu.add_item("谱面库根目录", 0)
+		for choice in _folder_choices(str(target.path)):
+			destinations.append(str(choice.path))
+			move_menu.add_item("%s%s" % ["  ".repeat(int(choice.depth)), str(choice.name)], destinations.size() - 1)
+		if destinations.is_empty():
+			move_menu.add_item("还没有别的文件夹", 0)
+			move_menu.set_item_disabled(0, true)
+		move_menu.id_pressed.connect(func(id: int) -> void:
+			move_menu.queue_free()
+			if id >= 0 and id < destinations.size():
+				_move_into(str(target.path), destinations[id]))
+		menu.add_child(move_menu)
+		menu.add_submenu_node_item("移动到…", move_menu, 1)
+	var folder := _selected_folder_row()
+	if folder.is_empty():
+		menu.add_item("删除文件夹…", 2)
+		menu.set_item_disabled(2, true)
+	else:
+		menu.add_item("删除文件夹「%s」…" % str(folder.name), 2)
+	# 处理函数先绑到变量上：match 直接写在 connect(...) 的参数位置时，
+	# 解析器会把右括号当成 match 模式的一部分。
+	var handle := func(id: int) -> void:
+		menu.queue_free()
+		match id:
+			0: _ask_new_folder()
+			2: _ask_delete_folder(str(folder.folder), str(folder.name))
+	menu.id_pressed.connect(handle)
+	add_child(menu)
+	menu.popup_centered()
+
+
+## 列表里当前高亮的那一行（空字典 = 没有选中行）。
+func _selected_row() -> Dictionary:
+	var selected := _list.get_selected_items()
+	if selected.is_empty() or selected[0] >= _rows.size():
+		return {}
+	return _rows[selected[0]]
+
+
+## 当前高亮行是文件夹行时返回它，否则空字典（删除文件夹只针对文件夹行）。
+func _selected_folder_row() -> Dictionary:
+	var row := _selected_row()
+	return row if not row.is_empty() and str(row.kind) == "folder" else {}
+
+
+## 「移动」作用在列表里当前这一项上：高亮的是文件夹行就挪整个文件夹，否则挪它的歌。
+func _move_target() -> Dictionary:
+	var row := _selected_row()
+	if row.is_empty():
+		return {}
+	if str(row.kind) == "folder":
+		return {"path": str(row.folder), "name": str(row.name)}
+	if str(row.kind) == "note":
+		return {}
+	return {"path": str(row.folder), "name": Storage.display_name(str(row.folder))}
+
+
+## 可以挪进去的文件夹（缩进表示层级）；排除它自己与它的子孙——那样会边挪边丢内容。
+func _folder_choices(exclude: String = "") -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	_collect_folders(_catalog_tree(), exclude, result)
+	return result
+
+
+func _collect_folders(nodes: Array, exclude: String, result: Array[Dictionary]) -> void:
+	for node in nodes:
+		if str(node.kind) != "folder":
+			continue
+		var path := str(node.path)
+		if not exclude.is_empty() and (path == exclude or path.begins_with(exclude + "/")):
+			continue
+		result.append({"path": path, "name": str(node.name), "depth": int(node.depth)})
+		_collect_folders(node.children, exclude, result)
+
+
+## 新建文件夹：建在谱面库根目录下，重名时自动加「(2)」。
+func _ask_new_folder() -> void:
+	var dialog := ConfirmationDialog.new()
+	dialog.name = "NewFolderDialog"
+	dialog.title = "新建文件夹"
+	dialog.ok_button_text = "新建"
+	dialog.cancel_button_text = "取消"
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	box.add_child(UI.label(box, "文件夹建在谱面库根目录下（电脑上就是 chart 目录），用来给歌曲分组。", 19, true))
+	var edit := LineEdit.new()
+	edit.placeholder_text = "文件夹名字"
+	edit.custom_minimum_size = Vector2(360, 48)
+	box.add_child(edit)
+	dialog.add_child(box)
+	dialog.register_text_enter(edit)
+	dialog.confirmed.connect(func() -> void:
+		dialog.queue_free()
+		_create_folder(edit.text))
+	dialog.canceled.connect(dialog.queue_free)
+	add_child(dialog)
+	dialog.popup_centered()
+	dialog.get_ok_button().add_theme_color_override("font_color", UI.Style.ACCENT)
+	edit.grab_focus.call_deferred()
+
+
+func _create_folder(name: String) -> void:
+	if name.strip_edges().is_empty():
+		return
+	var target := Storage.create_folder("", name)
+	if target.is_empty():
+		_message("新建失败", Storage.last_error)
+		return
+	_expanded_folders[target] = true
+	# 新文件夹多半不匹配当前的搜索词，清掉搜索框才能看到它。
+	_search.text = ""
+	_refresh()
+	_status.text = "已新建文件夹：%s" % Storage.display_name(target)
+
+
+## 把一项挪进文件夹（into 为空 = 谱面库根目录）。成绩与单曲延迟按文件夹名记，
+## 所以挪位置不会丢；同一个文件夹里重名时新位置下的名字会自动加「(2)」。
+func _move_into(path: String, into: String) -> void:
+	var moved_selection := ChartLoader.selected_folder == path or ChartLoader.selected_folder.begins_with(path + "/")
+	# 移动期间先挡住 Storage 广播的刷新：选中项要跟着搬到新路径，得由我们统一刷一次。
+	_deleting = true
+	var target := Storage.move_tree(path, into)
+	_deleting = false
+	if target.is_empty():
+		_message("移动失败", Storage.last_error)
+		return
+	_charts.clear()
+	if moved_selection:
+		ChartLoader.selected_folder = target + ChartLoader.selected_folder.trim_prefix(path)
+		_loaded_folder = ""
+	_reveal(target)
+	_refresh("", true)
+	_status.text = "已移动到：%s" % Storage.display_name(target)
+
+
+func _ask_delete_folder(path: String, name: String) -> void:
+	var songs := ImportAPI.songs_under(path, true)
+	var detail := "里面还有 %d 首歌。" % songs.size() if not songs.is_empty() else "这是一个空文件夹。"
+	_confirm_delete("删除文件夹", "删除文件夹「%s」？\n\n%s文件夹里的歌、音频、封面，以及它们的成绩与单曲延迟都会一并删除，且无法撤销。" % [name, detail],
+		func() -> void: _delete_folder(path, name))
+
+
+## 删除一个文件夹（连里面的歌一起）：先把里面的歌记下来，删完再逐首清成绩与单曲延迟。
+func _delete_folder(path: String, name: String) -> void:
+	var songs := ImportAPI.songs_under(path, true)
+	_deleting = true
+	var removed := Storage.delete_tree(path)
+	_deleting = false
+	if not removed:
+		_message("删除失败", Storage.last_error)
+		return
+	for song in songs:
+		Scores.forget_song(song)
+		Setting.set_song_offset(song, 0.0)
+		_charts.erase(song)
+	_expanded_folders.erase(path)
+	if ChartLoader.selected_folder == path or ChartLoader.selected_folder.begins_with(path + "/"):
+		ChartLoader.selected_folder = ""
+		ChartLoader.selected_chart = ""
+	_after_delete(path, "已删除文件夹：%s（%d 首歌）" % [name, songs.size()])
+
+
+## 展开 path 的每一个上级文件夹：导入完一个曲包、或者把歌挪进文件夹之后，
+## 要能一眼看到它落在哪一层。
+func _reveal(path: String) -> void:
+	for root in Storage.library_roots():
+		var base := root.rstrip("/")
+		if not path.begins_with(base + "/"):
+			continue
+		var prefix := base
+		for segment in path.trim_prefix(base + "/").get_base_dir().split("/"):
+			if segment.is_empty() or segment == ".":
+				continue
+			prefix = prefix.path_join(segment)
+			_expanded_folders[prefix] = true
+		return
 
 
 func _message(title: String, message: String) -> void:
